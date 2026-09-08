@@ -204,3 +204,9 @@
     @media (prefers-reduced-motion: reduce) {
       .waiting-dots span { animation: none; opacity: .7; }
     }
+
+    /* --- 来訪の記録 --- */
+    .visit-box { border: 1px solid #55aa00; background: #0a1400; color: #cfe8b0; padding: 10px 12px; border-radius: 4px; font-size: 13px; line-height: 1.8; margin-top: 14px; text-align: center; }
+    .visit-box b { color: #aaff00; font-size: 17px; }
+    .visit-remain { color: #888; font-size: 12px; }
+    .visit-done { color: #ffd700; font-size: 13px; }

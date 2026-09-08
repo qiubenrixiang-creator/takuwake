@@ -50,6 +50,33 @@
         ".validate": false
       }
     },
+    "members": {
+      ".read": true,
+      ".write": true,
+      "$member": {
+        ".validate": "newData.hasChildren(['name'])",
+        "name": {
+          ".validate": "newData.isString() && newData.val().length <= 30"
+        },
+        "events": {
+          "$day": {
+            ".validate": "newData.hasChildren(['table'])",
+            "table": {
+              ".validate": "newData.isString() && newData.val().length <= 30"
+            },
+            "ts": {
+              ".validate": "newData.isNumber()"
+            },
+            "$otherEvent": {
+              ".validate": false
+            }
+          }
+        },
+        "$otherMember": {
+          ".validate": false
+        }
+      }
+    },
     "$other": {
       ".read": false,
       ".write": false

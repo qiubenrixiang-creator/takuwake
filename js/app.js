@@ -60,17 +60,47 @@
   let currentMaxPerTable = 4; 
 
   // 音声ファイルの準備
-  const soundBGM = new Audio(AUDIO_FILES.bgmMain); soundBGM.loop = true;
-  const soundSecretBGM = new Audio(AUDIO_FILES.bgmSecret); soundSecretBGM.loop = true;
-  const soundSeriousBGM = new Audio(AUDIO_FILES.bgmSerious); soundSeriousBGM.loop = true;
-  const soundStaffRoll = new Audio(AUDIO_FILES.bgmStaffRoll); soundStaffRoll.loop = true;
-  const soundYes = new Audio(AUDIO_FILES.seDecide);
-  const soundNo = new Audio(AUDIO_FILES.seCancel);
-  const soundBack = new Audio(AUDIO_FILES.seBack);
-  const soundTalk = new Audio(AUDIO_FILES.seTalk); soundTalk.loop = true;
-  const soundFanfare = new Audio(AUDIO_FILES.seFanfare);
-  const soundEyecatch = new Audio(AUDIO_FILES.seEyecatch);
-  const soundGlitch = new Audio(AUDIO_FILES.seGlitch);
+  // play() は「今すぐ鳴らせ」ではなく「鳴らす準備をせよ」という要求で、
+  // 実際に音が出るまでに時間差があります。その間に pause() を呼んでも、
+  // 遅れて再生が始まってしまうため、場面が変わったあとに前のBGMが
+  // 鳴り出すことがありました。
+  // ここで play / pause に札（token）を付けて、止めるよう指示された後に
+  // 始まってしまった音を、その場で確実に止めます。
+  const nativePlay = HTMLMediaElement.prototype.play;
+  const nativePause = HTMLMediaElement.prototype.pause;
+
+  function makeSafeAudio(audio, preloadMode) {
+    let token = 0;
+    audio.preload = preloadMode || 'auto';
+    audio.play = function () {
+      const mine = ++token;
+      let p;
+      try { p = nativePlay.call(audio); } catch (e) { return Promise.resolve(); }
+      if (!p || !p.then) return Promise.resolve();
+      return p.then(() => {
+        if (mine !== token) { nativePause.call(audio); audio.currentTime = 0; }
+      }).catch(() => {});
+    };
+    audio.pause = function () {
+      token++;                       // 進行中の再生要求を無効にする
+      try { nativePause.call(audio); } catch (e) { /* 未読込なら何もしない */ }
+    };
+    return audio;
+  }
+
+  // 効果音は小さいので先に読み込み、BGMは必要になってから取りに行きます。
+  // 起動時に全部読むと十数MBの通信が走り、これも音のズレの原因でした。
+  const soundBGM = makeSafeAudio(new Audio(AUDIO_FILES.bgmMain), 'auto'); soundBGM.loop = true;
+  const soundSecretBGM = makeSafeAudio(new Audio(AUDIO_FILES.bgmSecret), 'none'); soundSecretBGM.loop = true;
+  const soundSeriousBGM = makeSafeAudio(new Audio(AUDIO_FILES.bgmSerious), 'none'); soundSeriousBGM.loop = true;
+  const soundStaffRoll = makeSafeAudio(new Audio(AUDIO_FILES.bgmStaffRoll), 'none'); soundStaffRoll.loop = true;
+  const soundYes = makeSafeAudio(new Audio(AUDIO_FILES.seDecide), 'auto');
+  const soundNo = makeSafeAudio(new Audio(AUDIO_FILES.seCancel), 'auto');
+  const soundBack = makeSafeAudio(new Audio(AUDIO_FILES.seBack), 'auto');
+  const soundTalk = makeSafeAudio(new Audio(AUDIO_FILES.seTalk), 'auto'); soundTalk.loop = true;
+  const soundFanfare = makeSafeAudio(new Audio(AUDIO_FILES.seFanfare), 'auto');
+  const soundEyecatch = makeSafeAudio(new Audio(AUDIO_FILES.seEyecatch), 'auto');
+  const soundGlitch = makeSafeAudio(new Audio(AUDIO_FILES.seGlitch), 'auto');
 
   function getClearNames() {
       let names = JSON.parse(localStorage.getItem('takuwake_clear_names_list'));
@@ -119,8 +149,8 @@
       }
     } else {
       const idleMessages = [
-          "お主、考え込んだまま動かんが…どうしたのかえ？ 寝ておるのか？", 
-          "む……？ まさか難しすぎて悩んでおるのか？ 気楽に行くのじゃぞ！", 
+          "お主、考え込んだまま動かんが…どうしたのじゃ？ 寝ておるのか？", 
+          "む……？ まさか難しすぎて悩んでおるのか？ 気楽に行けばよいのじゃぞ！", 
           "おいおい、魂が抜けたようになっておるぞ。生きておるかぁ？", 
           "ふむ、あまりに長い沈黙……。もしや、わしの質問に哲学を感じておるのか？"
       ];
@@ -155,6 +185,7 @@
     buildGallery();
     watchSharedSettings();
     watchHoldState();
+    watchMyHistory();
     watchConnection();
     bindEnterKeys(); 
   });
@@ -221,16 +252,19 @@
     });
   }
 
+  // 以前はミュートして一度再生することで温めていましたが、
+  // 7ファイル同時に再生要求を出すため、かえって音のズレを招いていました。
+  // 読み込みの指示だけを出します。
   function preloadAudio(audio) {
-    audio.muted = true;
-    audio.play().then(() => { audio.pause(); audio.currentTime = 0; audio.muted = false; }).catch(() => {});
+    try { audio.load(); } catch (e) { /* 読めなくても再生時に取りに行く */ }
   }
 
   function selectSound(enableAudio) {
     soundEnabled = enableAudio;
     if (soundEnabled) {
       soundYes.currentTime = 0; soundYes.play().catch(()=>{});
-      [soundSecretBGM, soundStaffRoll, soundEyecatch, soundBack, soundNo, soundFanfare, soundGlitch].forEach(preloadAudio);
+      // 小さい効果音だけ先に読む。BGMは必要になった時に読み込む。
+      [soundYes, soundNo, soundBack, soundTalk, soundFanfare, soundEyecatch, soundGlitch].forEach(preloadAudio);
       soundBGM.currentTime = 0; soundBGM.play().catch(()=>{});
     }
     document.getElementById('sound-section').style.display = 'none';
@@ -515,7 +549,7 @@
         document.getElementById('quiz-buttons').style.display = 'flex';
         showQuestion('q_secret_n_confirm'); 
       } else {
-        const warnings = nameInput === "" ? ["名前を入力するのじゃ！","コラ！名前を入れ忘れておるぞ！","じゃから、人数をちゃんと入力せよと言うておるじゃろ！","……お主、わしをからかっておるのか？次やらなかったらどうなるか分からんぞ！"] : ["お主…なんて下品な言葉を入力しておるのじゃ！まともな名前を入れんか！","コラ！ふざけるでない！やり直しじゃ！","わしを怒らせたいようじゃな…次はないぞ？","……よかろう。お主のその捻くれた根性、最後まで見届けてやろうではないか。"];
+        const warnings = nameInput === "" ? ["名前を入力するのじゃ！","コラ！名前を入れ忘れておるぞ！","じゃから、名前をちゃんと入力せよと言うておるじゃろ！","……お主、わしをからかっておるのか？次やらなかったらどうなるか分からんぞ！"] : ["お主…なんて下品な言葉を入力しておるのじゃ！まともな名前を入れんか！","コラ！ふざけるでない！やり直しじゃ！","わしを怒らせたいようじゃな…次はないぞ？","……よかろう。お主のその捻くれた根性、最後まで見届けてやろうではないか。"];
         typeWriter(warnings[Math.min(emptyNameCount-1, 3)], null, true);
       }
       return;
@@ -682,6 +716,38 @@
   }
 
 
+  // その日の様子と、これまでの来訪をふまえて挨拶を変える。
+  // 皆に同じことを言うぬしでは、その場にいる感じが出ないため。
+  function nushiGreeting() {
+    const specialNames = ["さおとめ", "ゆうご", "しょう", "ひなた", "たかや", "なおまさ", "りりみり"];
+    const visits = myVisitDays().length;
+    const done = visitorRoster.filter((v) => !v.isCollecting).length;
+    const lines = [];
+
+    if (playerName === "ぬし") {
+      lines.push('わしの名を名乗るとは、不届きなやつじゃ！まあよい。');
+    } else if (visits >= 5) {
+      lines.push(`おお、${playerName}か。もう${visits + 1}度目じゃな。すっかり顔なじみじゃ。`);
+    } else if (visits >= 1) {
+      lines.push(`おお、${playerName}。よう戻ってきたな。これで${visits + 1}度目じゃ。`);
+    } else if (specialNames.includes(playerName)) {
+      lines.push(`フォッフォッフォ…お主がうわさの${playerName}か！いつも世話になっとるのう！`);
+    } else {
+      lines.push(`フォッフォッフォ…${playerName}よ、よく来たな。`);
+    }
+
+    if (!isCollectionMode) {
+      if (done === 0) {
+        lines.push('今日はまだ誰も来ておらん。お主が一番乗りじゃな。');
+      } else if (sharedPeopleCount && done >= sharedPeopleCount - 1) {
+        lines.push('どうやら、お主で最後のようじゃな。皆待っておるぞ。');
+      } else {
+        lines.push(`本日はお主で${done + 1}人目じゃ。`);
+      }
+    }
+    return lines.join('\n') + '\n';
+  }
+
   function showQuestion(stepKey) {
     currentStep = stepKey; 
     
@@ -718,14 +784,7 @@
       if (isRetry) { 
           text = `よし、では改めて質問していくぞい。\n\n${text}`; 
       } else {
-        const specialNames = ["さおとめ", "ゆうご", "しょう", "ひなた", "たかや", "なおまさ", "りりみり"];
-        if (specialNames.includes(playerName)) {
-            text = `フォッフォッフォ…主がうわさの${playerName}か！いつも世話になっとるのう！まずはわしからの質問に答えるのじゃ。\n\n${text}`;
-        } else if (playerName === "ぬし") {
-            text = `わしの名前を名乗るとは不届きなやつじゃ！まあよい、まずはわしからの質問に答えるのじゃ。\n\n${text}`;
-        } else {
-            text = `フォッフォッフォ…${playerName}よ、よく来たな。まずはわしからの質問に答えるのじゃ。\n\n${text}`;
-        }
+        text = `${nushiGreeting()}まずはわしからの質問に答えるのじゃ。\n\n${text}`;
       }
     }
     
@@ -821,7 +880,7 @@
       }
       if (isYes) { 
           currentStep = 'm_abyss_intro_2'; 
-          typeWriter("我が出す問いに３回連続正解することができればお前の知らない卓に案内してやろう"); 
+          typeWriter("我が出す問いに三度続けて正解できたなら、貴様の知らぬ卓へ案内してやろう。"); 
       } else { 
           showResult('X'); 
       } 
@@ -916,7 +975,7 @@
     if (currentStep === 'q_omega_1') { 
         if (soundEnabled) { soundBack.currentTime=0; soundBack.play().catch(()=>{}); } 
         currentStep = 'm_abyss_intro_1'; 
-        typeWriter("おぬし、逃げるのではないだろうな 決して逃がさないぞ"); 
+        typeWriter("おぬし、逃げるのではないだろうな。決して逃がさぬぞ。"); 
         return; 
     }
     
@@ -1062,7 +1121,7 @@
       document.querySelector('.character-name').textContent = "深淵のぬし"; 
       document.querySelector('.character-name').nextElementSibling.textContent = "館の裏側に潜む影";
       if(soundEnabled){ soundBGM.pause(); soundSecretBGM.pause(); } 
-      typeWriter("……記録に刻むため、貴様の『真の名』をここに入力せよ。", () => { 
+      typeWriter("……記録に刻む。貴様の『真の名』をここに入力せよ。", () => { 
           document.getElementById('secret-name-input-section').style.display = 'flex'; 
           document.getElementById('secret-name-answer-input').value = ''; 
       });
@@ -1099,6 +1158,78 @@
     showResult(pendingResultKey, pendingResultIsJump);
   }
 
+
+  // ---- 会をまたいだ記録 ----------------------------------------
+  // 同じ端末で来館するたびに、その日の卓を1件だけ残します。
+  // 日付をキーにしているので、同じ日に何度書いても増えません。
+  let myHistory = null;
+  let visitRecorded = false;
+
+  function todayKey() {
+    const d = new Date();
+    return d.getFullYear() + '-' +
+      String(d.getMonth() + 1).padStart(2, '0') + '-' +
+      String(d.getDate()).padStart(2, '0');
+  }
+
+  function watchMyHistory() {
+    try {
+      db.ref('members/' + getDeviceId()).on('value', (snap) => {
+        myHistory = snap.val() || null;
+        const box = document.getElementById('result-box');
+        if (lastSeatCtx && box && box.style.display === 'block') renderSeatSection();
+      }, () => { /* 読めない場合は記録機能だけ働かない */ });
+    } catch (e) { /* 同上 */ }
+  }
+
+  function myVisitDays() {
+    if (!myHistory || !myHistory.events) return [];
+    return Object.keys(myHistory.events);
+  }
+
+  function mySeatedTables() {
+    if (!myHistory || !myHistory.events) return [];
+    const set = new Set();
+    Object.keys(myHistory.events).forEach((d) => {
+      const e = myHistory.events[d];
+      if (e && e.table) set.add(String(e.table).charAt(0));
+    });
+    return ALL_TABLES.filter((k) => set.has(k));
+  }
+
+  function recordVisit(tableShort) {
+    if (visitRecorded) return;
+    const key = String(tableShort).charAt(0);
+    if (!ALL_TABLES.includes(key)) return;   // 隠し卓は実際の席ではないので数えない
+    visitRecorded = true;
+    const name = realPlayerName || playerName || '名無し';
+    const base = 'members/' + getDeviceId();
+    db.ref(base).update({ name: name })
+      .then(() => db.ref(base + '/events/' + todayKey()).set({ table: tableShort, ts: Date.now() }))
+      .catch(() => { visitRecorded = false; });
+  }
+
+  function grantVisitTitles() {
+    const days = myVisitDays().length;
+    const seated = mySeatedTables().length;
+    if (days >= 3) saveTitle('【館の常連】');
+    if (days >= 10) saveTitle('【館の古株】');
+    if (seated >= 8) saveTitle('【八卓行脚】');
+  }
+
+  function buildVisitHtml() {
+    const days = myVisitDays();
+    if (days.length === 0) return '';
+    const seated = mySeatedTables();
+    const remain = ALL_TABLES.filter((k) => !seated.includes(k));
+    let s = '<div class="visit-box"><strong>【 来訪の記録 】</strong><br>';
+    s += `館へ来るのは、これで <b>${days.length}</b> 度目じゃ。<br>`;
+    s += `座った卓：${seated.length ? seated.map((k) => k + '卓').join('・') : 'まだ無し'}<br>`;
+    s += remain.length
+      ? `<span class="visit-remain">まだ見ぬ卓：${remain.map((k) => k + '卓').join('・')}</span>`
+      : '<span class="visit-done">八つの卓すべてに座ったな。見事な行脚じゃ！</span>';
+    return s + '</div>';
+  }
 
   // ---- 席の表示 ------------------------------------------------
   // 待機モード中は卓を伏せ、幹事が席を告げた瞬間に全員へ映し出す。
@@ -1186,6 +1317,12 @@
           <strong>【 同じ卓の仲間 】</strong><br>
           <span style="color: #ffffff; font-size: 22px; font-weight: bold; text-shadow: 0 0 8px rgba(255,255,255,0.5);">${mates.join('、 ')}</span>
         </div>`;
+    }
+
+    if (!ctx.isCollection && ctx.finalKey !== 'GOD') {
+      recordVisit(seatShort);
+      grantVisitTitles();
+      html += buildVisitHtml();
     }
 
     if (ctx.isCollection && ctx.finalKey !== 'GOD') {
