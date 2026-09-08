@@ -1,0 +1,43 @@
+{
+  "rules": {
+    "roster": {
+      ".read": true,
+      ".write": true,
+      "$entry": {
+        ".validate": "newData.hasChildren(['name', 'table', 'color', 'timestamp'])",
+        "name": {
+          ".validate": "newData.isString() && newData.val().length <= 30"
+        },
+        "table": {
+          ".validate": "newData.isString() && newData.val().length <= 30"
+        },
+        "color": {
+          ".validate": "newData.isString() && newData.val().length <= 20"
+        },
+        "timestamp": {
+          ".validate": "newData.isNumber()"
+        },
+        "isCollecting": {
+          ".validate": "newData.isBoolean()"
+        },
+        "$other": {
+          ".validate": false
+        }
+      }
+    },
+    "config": {
+      ".read": true,
+      ".write": true,
+      "participantCount": {
+        ".validate": "newData.isNumber() && newData.val() >= 2 && newData.val() <= 200"
+      },
+      "$other": {
+        ".validate": false
+      }
+    },
+    "$other": {
+      ".read": false,
+      ".write": false
+    }
+  }
+}
