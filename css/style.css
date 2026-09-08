@@ -137,3 +137,53 @@
       body::after { display: none; }
       .result-box, .main-table, .btn-true-ending { animation: none !important; }
     }
+
+    /* --- 卓組みの間（kumi.html）--- */
+    body.host-page { padding: 24px 12px 60px; display: block; }
+    .host-wrapper { max-width: 860px; margin: 0 auto; }
+    .host-wrapper .game-container { margin-bottom: 20px; }
+
+    .host-section { border: 2px solid #444; border-radius: 6px; padding: 14px; margin-bottom: 16px; background: #050505; }
+    .host-title { color: #aaff00; font-size: 16px; font-weight: bold; border-left: 4px solid #aaff00; padding-left: 8px; margin-bottom: 10px; }
+    .host-note { font-size: 13px; color: #aaa; line-height: 1.6; margin-top: 8px; }
+    .host-note-warn { color: #ff9999; }
+
+    .host-field { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+    .host-field label { font-size: 14px; color: #ccc; flex: 1 1 100%; }
+    .host-field .name-input { width: 90px; margin-bottom: 0; }
+    .host-field .btn { width: auto; flex: 1 1 auto; }
+    .btn-primary { background-color: #331a00; border-color: #ffaa00; color: #ffd700; font-weight: bold; }
+
+    .host-roster { display: flex; flex-direction: column; gap: 4px; max-height: 320px; overflow-y: auto; }
+    .host-roster-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid #333; border-radius: 4px; }
+    .host-roster-row .who { flex: 1; min-width: 0; font-size: 15px; }
+    .host-roster-row .meta { display: block; font-size: 12px; color: #888; }
+    .host-icon-btn { background: none; border: 1px solid #555; color: #aaa; font-family: 'DotGothic16', sans-serif; font-size: 12px; padding: 4px 10px; border-radius: 4px; cursor: pointer; }
+    .host-icon-btn:hover { color: #fff; border-color: #fff; }
+
+    .host-tables { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+    .host-table-card { border: 2px solid #fff; border-radius: 6px; padding: 10px; background: #000; }
+    .host-table-head { display: flex; justify-content: space-between; align-items: baseline; border-bottom: 1px dashed; padding-bottom: 6px; margin-bottom: 6px; }
+    .host-table-head .label { font-size: 15px; font-weight: bold; }
+    .host-table-head .count { font-size: 12px; }
+
+    .host-seat { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; width: 100%; text-align: left; font-family: 'DotGothic16', sans-serif; font-size: 15px; padding: 7px 8px; border: 1px solid transparent; border-radius: 4px; background: none; color: #fff; cursor: pointer; }
+    .host-seat:hover { background: #1a1a1a; }
+    .host-seat.selected { border-color: #ffd700; background: #332600; }
+    .host-seat .role { font-size: 11px; color: #999; flex: none; }
+    .host-seat.empty { color: #666; }
+
+    .host-table-note { font-size: 12px; color: #aaa; border-top: 1px dashed #444; margin-top: 8px; padding-top: 8px; line-height: 1.6; }
+    .host-table-warn { font-size: 12px; color: #ff9999; margin-top: 4px; line-height: 1.6; }
+
+    @media print {
+      body.host-page { background: #fff; color: #000; }
+      body.host-page::after { display: none; }
+      .no-print, .host-page .game-container { display: none !important; }
+      .host-tables { display: block; }
+      .host-table-card { border: 3px solid #000 !important; page-break-after: always; color: #000; background: #fff; margin-bottom: 0; }
+      .host-table-head { color: #000 !important; border-color: #000 !important; }
+      .host-table-head .label { font-size: 34px; }
+      .host-seat { color: #000; font-size: 24px; }
+      .host-table-note, .host-table-warn { color: #000; font-size: 13px; }
+    }

@@ -155,3 +155,83 @@
     q_coop_deep3: { text: "仲間と作戦会議を開き、「ああでもないこうでもない」とベストな１手を模索するのが楽しいかの？", yes: "result_D", no: "result_D" },
     q_coop_deep4: { text: "最後の１手で劇的な逆転全滅回避（またはクリア）が起きた時の熱いドラマを体験したいかの？", yes: "result_D", no: "result_D" }
   };
+
+// ============================================================
+//  ここから下は「卓組み画面」(kumi.html) で使う追加データです。
+// ============================================================
+
+// 診断前に聞く2問。この2つはクイズの分岐からは分からないのに、
+// 当日の卓の成否を大きく左右するので、別に聞いています。
+const PRE_QUESTIONS = [
+  {
+    key: 'exp',
+    text: 'その前に二つ聞いておこう。\nお主、ボードゲームの腕前はどれほどじゃ？',
+    options: [
+      { label: 'ほとんど初めてじゃ', value: 0 },
+      { label: '何度か遊んだことがある', value: 1 },
+      { label: 'ルール説明もできるぞ', value: 2 }
+    ]
+  },
+  {
+    key: 'leave',
+    text: 'うむ。では最後に……\n今日は途中で帰る予定はあるかの？',
+    options: [
+      { label: '最後までおるぞ', value: 0 },
+      { label: '途中で帰る', value: 1 }
+    ]
+  }
+];
+
+// それぞれの卓が持つ性格を数値にしたもの（0〜4）。
+//   weight   軽いゲーム ← → 重いゲーム
+//   strategy 運まかせ   ← → じっくり戦略
+//   talk     静かに集中 ← → わいわい喋る
+//   pace     長考OK     ← → テンポ重視
+const TABLE_PROFILE = {
+  A: { weight: 1, strategy: 1, talk: 4, pace: 3 },
+  B: { weight: 4, strategy: 4, talk: 1, pace: 1 },
+  C: { weight: 2, strategy: 3, talk: 4, pace: 2 },
+  D: { weight: 3, strategy: 3, talk: 2, pace: 1 },
+  E: { weight: 0, strategy: 1, talk: 3, pace: 4 },
+  F: { weight: 1, strategy: 0, talk: 3, pace: 3 },
+  G: { weight: 2, strategy: 2, talk: 2, pace: 2 },
+  H: { weight: 4, strategy: 2, talk: 1, pace: 0 }
+};
+
+// 名簿には「A卓 (笑い声の宴の間)」のような文字列で入っているので、
+// そこから記号を取り出してプロフィールに変換します。
+// 隠し卓に到達した人は席の傾向が分からないため、中庸のG卓として扱います。
+function profileFromTableName(tableName) {
+  const key = (tableName || '').charAt(0).toUpperCase();
+  return TABLE_PROFILE[key] || TABLE_PROFILE.G;
+}
+
+function describeTableGroup(members) {
+  if (members.length === 0) return 'まだ誰もおらぬ';
+  const avg = (k) => members.reduce((s, m) => s + m.profile[k], 0) / members.length;
+  const w = avg('weight'), t = avg('talk'), s = avg('strategy'), pc = avg('pace');
+  const out = [];
+  out.push(t < 1.3 ? '静かに集中' : t < 2.7 ? '会話はほどほど' : 'わいわい賑やか');
+  out.push(w < 1.3 ? '軽めのゲーム' : w < 2.7 ? '中量級' : '重量級もOK');
+  out.push(s < 1.3 ? '運まかせ寄り' : s < 2.7 ? '運と戦略のバランス' : 'じっくり戦略');
+  if (pc >= 2.7) out.push('テンポ重視');
+  return out.join('・');
+}
+
+// 幹事が当日ほんとうに気にすべきことだけを警告します。
+function tableGroupWarnings(members) {
+  const w = [];
+  if (members.length === 0) return w;
+  if (members.some((m) => m.exp === 0) && !members.some((m) => m.exp === 2)) {
+    w.push('初心者がいるが、ルール説明ができる者がおらぬ');
+  }
+  const talks = members.map((m) => m.profile.talk);
+  if (Math.max(...talks) - Math.min(...talks) >= 3) {
+    w.push('静かに遊びたい者と賑やかに遊びたい者が同席しておる');
+  }
+  const avgWeight = members.reduce((s, m) => s + m.profile.weight, 0) / members.length;
+  if (members.some((m) => m.leave === 1) && avgWeight >= 2.7) {
+    w.push('途中で帰る者がおるので、長いゲームは避けるのじゃ');
+  }
+  return w;
+}

@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#000000">
+  <meta name="description" content="卓分けの館・幹事用の卓組み画面。診断を終えた全員をまとめて卓に割り当てます。">
+  <title>卓組みの間 | 卓分けの館</title>
+  <link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+</head>
+<body class="host-page">
+
+<div class="host-wrapper">
+
+  <div class="game-container">
+    <div class="character-box">
+      <div class="character-avatar">🗝️</div>
+      <div>
+        <div class="character-name">卓組みの間</div>
+        <div style="font-size: 11px; color: #aaa;">幹事だけが入る部屋</div>
+      </div>
+    </div>
+
+    <div id="net-status" class="net-status">通信が切れています。名簿を読み込めません。</div>
+    <div id="notice-bar" class="notice-bar"></div>
+
+    <div class="message-box" style="min-height: auto;">
+      <div id="host-message">診断を終えた者を集めて、卓を組むぞい。<br>全員の診断が終わってから「卓を組む」を押すのじゃ。</div>
+    </div>
+  </div>
+
+  <div class="host-section no-print">
+    <div class="host-title">診断を終えた者 <span id="roster-count"></span></div>
+    <div id="roster-list" class="host-roster"></div>
+  </div>
+
+  <div class="host-section no-print">
+    <div class="host-title">卓の設定</div>
+    <div class="host-field">
+      <label for="pref-size">1卓あたりの人数のめやす</label>
+      <input type="number" id="pref-size" class="name-input" value="4" min="2" max="8" inputmode="numeric">
+      <button class="btn" onclick="recalcCapacities()">▶ 卓数を計算し直す</button>
+    </div>
+    <div id="cap-summary" class="host-note"></div>
+  </div>
+
+  <div class="host-section no-print">
+    <button class="btn btn-primary" onclick="runAssign()">▶ 卓を組む</button>
+    <button class="btn" style="margin-top:8px;" onclick="applyToRoster()">▶ この結果を全員に反映する</button>
+    <div id="assign-msg" class="host-note"></div>
+  </div>
+
+  <div class="host-section">
+    <div class="host-title" id="result-title">卓の割り当て</div>
+    <div class="host-note no-print" id="swap-hint"></div>
+    <div id="tables" class="host-tables"></div>
+  </div>
+
+  <div class="host-section no-print">
+    <button class="btn" onclick="window.print()">▶ 卓に置く札を印刷する</button>
+    <button class="btn" style="margin-top:8px;" onclick="copyResult()">▶ 結果をコピーする</button>
+    <a class="btn" href="index.html" style="margin-top:8px; display:block; text-decoration:none;">▶ 館へ戻る</a>
+  </div>
+
+</div>
+
+<script src="js/firebase-config.js"></script>
+<script src="js/data.js"></script>
+<script src="js/assign.js"></script>
+<script src="js/kumi.js"></script>
+</body>
+</html>

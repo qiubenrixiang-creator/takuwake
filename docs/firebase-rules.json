@@ -20,6 +20,12 @@
         "isCollecting": {
           ".validate": "newData.isBoolean()"
         },
+        "exp": {
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 2"
+        },
+        "leave": {
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 1"
+        },
         "$other": {
           ".validate": false
         }

@@ -503,6 +503,44 @@
     resetIdleTimer();
   }
 
+  // 卓組みに必要な2つの情報を、診断の前に聞いておく。
+  // クイズの分岐からは分からないのに、当日の卓の成否を大きく左右するため。
+  let preAnswers = { exp: 1, leave: 0 };
+  let preIndex = 0;
+
+  function startPreQuiz() {
+    preIndex = 0;
+    preAnswers = { exp: 1, leave: 0 };
+    document.getElementById('quiz-buttons').style.display = 'none';
+    renderPreQuestion();
+  }
+
+  function renderPreQuestion() {
+    const q = PRE_QUESTIONS[preIndex];
+    const box = document.getElementById('pre-quiz-section');
+    box.innerHTML = '';
+    q.options.forEach((o) => {
+      const b = document.createElement('button');
+      b.className = 'btn';
+      b.textContent = '▶ ' + o.label;
+      b.onclick = () => answerPre(o.value);
+      box.appendChild(b);
+    });
+    box.style.display = 'flex';
+    typeWriter(q.text, null, true);
+  }
+
+  function answerPre(value) {
+    if (isTyping) { skipTyping(); return; }
+    if (soundEnabled) { soundYes.currentTime = 0; soundYes.play().catch(()=>{}); }
+    preAnswers[PRE_QUESTIONS[preIndex].key] = value;
+    preIndex++;
+    if (preIndex < PRE_QUESTIONS.length) { renderPreQuestion(); return; }
+    document.getElementById('pre-quiz-section').style.display = 'none';
+    document.getElementById('quiz-buttons').style.display = 'flex';
+    showQuestion('start');
+  }
+
   function startGameConfirm() {
     if(soundEnabled){ soundYes.currentTime=0; soundYes.play().catch(()=>{}); }
     emptyNameCount = 0; playerName = tempName; realPlayerName = tempName; stepHistory = []; undoCount = 0; isGodMode = false;
@@ -512,7 +550,9 @@
     if(isCollectionMode && soundBGM.paused) {
         soundBGM.currentTime=0; soundBGM.play().catch(()=>{}); 
     }
-    showQuestion('start');
+    // 図鑑収集モードは席に関係しないので、追加の質問は飛ばす
+    if (isCollectionMode) { showQuestion('start'); }
+    else { startPreQuiz(); }
   }
 
   function typeWriter(text, onComplete, isNameScreen=false) {
@@ -877,7 +917,9 @@
         table: tableName, 
         color: tableColor, 
         timestamp: Date.now(), 
-        isCollecting: !!isCollectingMode 
+        isCollecting: !!isCollectingMode,
+        exp: preAnswers.exp,
+        leave: preAnswers.leave
     }).catch(() => {
         showNotice('名簿に登録できませんでした。通信状況を確認して、もう一度診断してください。');
     });
