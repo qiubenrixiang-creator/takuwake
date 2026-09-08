@@ -13,6 +13,26 @@
 </head>
 <body class="host-page">
 
+<!-- 幹事以外が迷い込んだときの扉 -->
+<div id="lock-screen" class="lock-screen">
+  <div class="game-container" style="max-width:420px; width:100%;">
+    <div class="character-box">
+      <div class="character-avatar">🚪</div>
+      <div>
+        <div class="character-name">閉ざされた扉</div>
+        <div style="font-size: 11px; color: #aaa;">幹事のみが通れる</div>
+      </div>
+    </div>
+    <div class="message-box" style="min-height:auto;">
+      この扉には錠がかかっておる。<br>幹事の合言葉を告げるのじゃ。
+    </div>
+    <input type="text" id="lock-word" class="name-input" placeholder="あいことば" autocomplete="off">
+    <button class="btn" onclick="tryUnlock()">▶ 扉を開ける</button>
+    <a class="btn btn-back" href="index.html" style="display:block; text-decoration:none; text-align:center;">▶ 館へ戻る</a>
+  </div>
+</div>
+
+
 <div class="host-wrapper">
 
   <div class="game-container">
@@ -48,8 +68,18 @@
   </div>
 
   <div class="host-section no-print">
+    <div class="host-title">結果の公開</div>
+    <div id="hold-status" class="host-note"></div>
+    <button class="btn" style="margin-top:8px;" onclick="toggleHold()" id="btn-hold">▶ 結果を伏せる（待機モード）</button>
+    <div class="host-note">
+      伏せておくと、診断を終えた者の画面には「しばし待て」と出ます。<br>
+      会が始まる前に押しておくのじゃ。
+    </div>
+  </div>
+
+  <div class="host-section no-print">
     <button class="btn btn-primary" onclick="runAssign()">▶ 卓を組む</button>
-    <button class="btn" style="margin-top:8px;" onclick="applyToRoster()">▶ この結果を全員に反映する</button>
+    <button class="btn" style="margin-top:8px;" onclick="applyToRoster()">▶ 全員に席を告げる</button>
     <div id="assign-msg" class="host-note"></div>
   </div>
 

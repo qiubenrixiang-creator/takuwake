@@ -135,7 +135,10 @@
     const data = snapshot.val();
     visitorRoster = [];
     if (data) {
-      for (let nameKey in data) { visitorRoster.push(data[nameKey]); }
+      for (let nameKey in data) {
+        const entry = Object.assign({ id: nameKey }, data[nameKey]);
+        visitorRoster.push(entry);
+      }
       visitorRoster.sort((a, b) => a.timestamp - b.timestamp);
     }
     if(document.getElementById('roster-modal').classList.contains('active')){
@@ -151,9 +154,44 @@
     typeWriter('まずは、音声の設定を選ぶのじゃ。', null, true);
     buildGallery();
     watchSharedSettings();
+    watchHoldState();
     watchConnection();
     bindEnterKeys(); 
   });
+
+  // 待機モード。幹事が席を告げるまで、卓を伏せておく仕組み。
+  let holdState = { hold: false, revealed: false };
+
+  function watchHoldState() {
+    try {
+      db.ref('config').on('value', (snap) => {
+        const c = snap.val() || {};
+        const wasRevealed = holdState.revealed;
+        holdState.hold = !!c.holdResults;
+        holdState.revealed = !!c.revealed;
+
+        const box = document.getElementById('result-box');
+        if (box && box.style.display === 'block' && lastSeatCtx) {
+          renderSeatSection();
+          if (holdState.hold && holdState.revealed && !wasRevealed) {
+            if (soundEnabled) {
+              soundBGM.pause(); soundSecretBGM.pause();
+              soundFanfare.currentTime = 0; soundFanfare.play().catch(() => {});
+            }
+            typeWriter('待たせたのう！\n幹事が卓を組み終えたぞい。\nこれがお主の席じゃ！', null, true);
+          }
+        }
+        if (document.getElementById('roster-modal').classList.contains('active')) renderRoster();
+      }, () => { /* 読めない場合は従来どおり即時表示 */ });
+    } catch (e) { /* 同上 */ }
+  }
+
+  // 幹事だけが通れる扉。合言葉か神の座から入る。
+  function goToKumiRoom() {
+    try { sessionStorage.setItem('takuwake_kumi_pass', '1'); } catch (e) { /* 保存できなくとも合言葉で入れる */ }
+    if (soundEnabled) { soundYes.currentTime = 0; soundYes.play().catch(() => {}); }
+    location.href = 'kumi.html';
+  }
 
   // 通信が切れると名簿が更新されないため、画面に出して気づけるようにする。
   function watchConnection() {
@@ -411,6 +449,14 @@
         isGodMode = true;
         isDirectGodMode = true; 
         showResult('GOD');
+        return;
+    }
+
+    if (nameInput === "たくぐみ") {
+        if(soundEnabled){ soundYes.currentTime=0; soundYes.play().catch(()=>{}); }
+        typeWriter("……その言葉、幹事のものじゃな。\n『卓組みの間』への扉を開こう。", () => {
+            goToKumiRoom();
+        }, true);
         return;
     }
 
@@ -1053,6 +1099,108 @@
     showResult(pendingResultKey, pendingResultIsJump);
   }
 
+
+  // ---- 席の表示 ------------------------------------------------
+  // 待機モード中は卓を伏せ、幹事が席を告げた瞬間に全員へ映し出す。
+  // 幹事が手で入れ替えることがあるので、公開後は診断結果ではなく
+  // 名簿に書かれた「実際の席」を読みにいきます。
+  let lastSeatCtx = null;
+
+  function myRosterEntry() {
+    const id = getDeviceId();
+    return visitorRoster.find((v) => v.id === id) || null;
+  }
+
+  function buildSecretMessage(finalKey, data, inCollection) {
+    let msg = data.secretMessage;
+    if (!msg || !msg.includes('{STAFF_MSG}')) return msg;
+    const staff = inCollection ? {
+      S: "この偉大なる記録、図鑑の最奥にしかと刻み込もう。",
+      Z: "その優しき心、図鑑に確かに刻ませてもらったぞい！",
+      N: "図鑑の1ページとして、その反骨精神をしっかりと刻み込んでおこう。",
+      J: "その風流な探究心、しかと図鑑に刻み込んでおこう。",
+      U: "その類まれなる『天邪鬼』っぷり、しかと図鑑に記録したぞい！"
+    } : {
+      S: "スタッフにこの画面を見せて『マスター』と伝えるのじゃ！",
+      Z: "スタッフから特別な景品をもらうが良い！",
+      N: "その反骨精神に免じて景品をやろう。スタッフに見せるのじゃ！",
+      J: "スタッフにこの画面を見せて『ホトトギス』と合言葉を伝えるのじゃ！",
+      U: "その類まれなる『天邪鬼』っぷりを称えよう！スタッフにこの画面を見せるのじゃ！"
+    };
+    return msg.replace('{STAFF_MSG}', staff[finalKey] || '');
+  }
+
+  function renderSeatSection() {
+    if (!lastSeatCtx) return;
+    const ctx = lastSeatCtx;
+    const mainTableEl = document.getElementById('main-table');
+    const dynamicArea = document.getElementById('dynamic-result-area');
+
+    let html = '';
+    if (ctx.data.isSecret) {
+      const msg = buildSecretMessage(ctx.finalKey, ctx.data, ctx.isCollection);
+      if (msg) html += `<div class="secret-message-box">${msg}</div>`;
+    }
+
+    const waiting = holdState.hold && !holdState.revealed
+      && !ctx.isCollection && ctx.finalKey !== 'GOD';
+
+    if (waiting) {
+      mainTableEl.style.color = '#00ffcc';
+      mainTableEl.style.animation = 'glow 1.6s infinite alternate';
+      mainTableEl.textContent = '席は幹事が決めておる。しばし待つのじゃ…';
+      html += `
+        <div class="waiting-box">
+          <div class="waiting-dots"><span>●</span><span>●</span><span>●</span></div>
+          全員の診断が終わると、幹事が卓を組む。<br>
+          この画面を開いたまま待っておれば、<br>席が決まった瞬間に映し出されるぞい。
+        </div>`;
+      dynamicArea.innerHTML = html;
+      return;
+    }
+
+    mainTableEl.style.color = ctx.data.color;
+    mainTableEl.style.animation = ctx.data.isSecret
+      ? 'secretGlow 0.5s infinite alternate' : 'glow 1.2s infinite alternate';
+
+    let seatShort = ctx.data.main.split(' ')[0];
+    let seatFull = ctx.data.main;
+    const revealedByHost = holdState.hold && holdState.revealed && !ctx.isCollection;
+    if (revealedByHost) {
+      const me = myRosterEntry();
+      if (me && me.table) { seatShort = me.table; seatFull = me.table; }
+    }
+    mainTableEl.textContent = `今回のあなたの席は... ${seatFull}`;
+
+    const showMates = !ctx.data.isSecret || revealedByHost;
+    if (showMates) {
+      let mates = visitorRoster
+        .filter((v) => v.table === seatShort && !v.isCollecting)
+        .map((v) => v.name);
+      if (ctx.displayName && !ctx.isCollection && !mates.includes(ctx.displayName)) {
+        mates.push(ctx.displayName);
+      }
+      html += `
+        <hr style="border-color:#444; margin:12px 0;">
+        <div style="font-size: 16px; color: #fff; line-height: 1.8; text-align: center;">
+          <strong>【 同じ卓の仲間 】</strong><br>
+          <span style="color: #ffffff; font-size: 22px; font-weight: bold; text-shadow: 0 0 8px rgba(255,255,255,0.5);">${mates.join('、 ')}</span>
+        </div>`;
+    }
+
+    if (ctx.isCollection && ctx.finalKey !== 'GOD') {
+      const regTable = localStorage.getItem('takuwake_registered_table') || "不明";
+      html += `
+        <div style="font-size: 13px; color: #00ffcc; margin-top: 15px; text-align: center; font-weight: bold; border-top: 1px dashed #444; padding-top: 10px;">
+          ※現在は【図鑑収集モード】です。<br>名簿の席は初回の『${regTable}』から動きません。<br>（スタッフへの報告も不要です）
+        </div>`;
+    }
+
+    dynamicArea.innerHTML = html;
+  }
+
+  function showResultBoxAgain() { renderSeatSection(); }
+
   function executeShowResult(finalKey, isJump, isFullCapacityChanged, originalMainName) {
     let earnedTitle = '【迷える旅人】';
     let displayName = realPlayerName || playerName || "名無し";
@@ -1204,56 +1352,20 @@
     let titleStr = (isJump || finalKey === 'GOD' || !isCollectionMode) ? '' : `獲得称号：${earnedTitle}\n`;
 
     const showResultContent = () => {
-      resultTypeEl.textContent = `あなたは【${finalResultData.type}】`; 
-      mainTableEl.textContent = `今回のあなたの席は... ${finalResultData.main}`;
+      resultTypeEl.textContent = `あなたは【${finalResultData.type}】`;
       const descEl = document.getElementById('result-desc');
       if (descEl) {
         descEl.textContent = finalResultData.desc || '';
         descEl.style.display = finalResultData.desc ? 'block' : 'none';
       }
-      
-      let secretMsg = finalResultData.secretMessage;
-      if (secretMsg && secretMsg.includes('{STAFF_MSG}')) {
-          if (isCollectionMode) {
-              if (finalKey === 'S') secretMsg = secretMsg.replace('{STAFF_MSG}', "この偉大なる記録、図鑑の最奥にしかと刻み込もう。");
-              else if (finalKey === 'Z') secretMsg = secretMsg.replace('{STAFF_MSG}', "その優しき心、図鑑に確かに刻ませてもらったぞい！");
-              else if (finalKey === 'N') secretMsg = secretMsg.replace('{STAFF_MSG}', "図鑑の1ページとして、その反骨精神をしっかりと刻み込んでおこう。");
-              else if (finalKey === 'J') secretMsg = secretMsg.replace('{STAFF_MSG}', "その風流な探究心、しかと図鑑に刻み込んでおこう。");
-              else if (finalKey === 'U') secretMsg = secretMsg.replace('{STAFF_MSG}', "その類まれなる『天邪鬼』っぷり、しかと図鑑に記録したぞい！");
-          } else {
-              if (finalKey === 'S') secretMsg = secretMsg.replace('{STAFF_MSG}', "スタッフにこの画面を見せて『マスター』と伝えるのじゃ！");
-              else if (finalKey === 'Z') secretMsg = secretMsg.replace('{STAFF_MSG}', "スタッフから特別な景品をもらうが良い！");
-              else if (finalKey === 'N') secretMsg = secretMsg.replace('{STAFF_MSG}', "その反骨精神に免じて景品をやろう。スタッフに見せるのじゃ！");
-              else if (finalKey === 'J') secretMsg = secretMsg.replace('{STAFF_MSG}', "スタッフにこの画面を見せて『ホトトギス』と合言葉を伝えるのじゃ！");
-              else if (finalKey === 'U') secretMsg = secretMsg.replace('{STAFF_MSG}', "その類まれなる『天邪鬼』っぷりを称えよう！スタッフにこの画面を見せるのじゃ！");
-          }
-      }
 
-      if (finalResultData.isSecret) { 
-          dynamicArea.innerHTML = `<div class="secret-message-box">${secretMsg}</div>`; 
-      } else {
-        const currentTableShort = finalResultData.main.split(' ')[0];
-        let sameTableMembers = visitorRoster.filter(v => v.table === currentTableShort && !v.isCollecting).map(v => v.name);
-        if (displayName && !isCollectionMode && !sameTableMembers.includes(displayName)) {
-            sameTableMembers.push(displayName);
-        }
-        dynamicArea.innerHTML = `
-          <hr style="border-color:#444; margin:12px 0;">
-          <div style="font-size: 16px; color: #fff; line-height: 1.8; text-align: center;">
-            <strong>【 同じ卓の仲間 】</strong><br>
-            <span style="color: #ffffff; font-size: 22px; font-weight: bold; text-shadow: 0 0 8px rgba(255,255,255,0.5);">${sameTableMembers.join('、 ')}</span>
-          </div>
-        `;
-      }
-
-      if (isCollectionMode && finalKey !== 'GOD') {
-        const regTable = localStorage.getItem('takuwake_registered_table') || "不明";
-        dynamicArea.innerHTML += `
-          <div style="font-size: 13px; color: #00ffcc; margin-top: 15px; text-align: center; font-weight: bold; border-top: 1px dashed #444; padding-top: 10px;">
-            ※現在は【図鑑収集モード】です。<br>名簿の席は初回の『${regTable}』から動きません。<br>（スタッフへの報告も不要です）
-          </div>
-        `;
-      }
+      lastSeatCtx = {
+        finalKey: finalKey,
+        data: finalResultData,
+        displayName: displayName,
+        isCollection: isCollectionMode
+      };
+      renderSeatSection();
 
       resultBox.style.display = 'block';
       
@@ -1497,6 +1609,22 @@
               <div style="color:#888; font-size:14px; line-height:1.6;">現在、図鑑探索の旅に出ている者はまだおらぬようじゃ。</div>
             `;
         }
+        list.appendChild(groupDiv);
+
+    } else if (holdState.hold && !holdState.revealed) {
+        infoText.innerHTML = "※幹事が卓を組んでおる最中じゃ。<br>席が決まるまで、卓の中身は伏せておくぞい。";
+        const myId = getDeviceId();
+        const groupDiv = document.createElement('div');
+        groupDiv.style.border = '1px solid #00ffcc';
+        groupDiv.style.padding = '8px';
+        groupDiv.style.borderRadius = '4px';
+        groupDiv.style.background = 'rgba(0,34,34,0.5)';
+        const names = visitorRoster.filter(v => !v.isCollecting)
+            .map(v => v.id === myId ? `<span style="color:#ffd700;">${v.name}（お主）</span>` : v.name);
+        groupDiv.innerHTML = `
+          <div style="color:#00ffcc; font-weight:bold; border-bottom:1px dashed #00ffcc; padding-bottom:4px; margin-bottom:4px;">診断を終えた者 (${names.length}名)</div>
+          <div style="color:#ddd; font-size:14px; line-height:1.6;">${names.join('、 ')}</div>
+        `;
         list.appendChild(groupDiv);
 
     } else {
@@ -1960,6 +2088,7 @@
       <button class="btn" style="border-color:#eeeeff; color:#eeeeff;" onclick="explainGodPower('muku')">▶ 『透視の才』を行使</button>
       <button class="btn" style="border-color:#ff88ff; color:#ff88ff;" onclick="explainGodPower('shinmei')">▶ 『真名の才』を行使</button>
       <button class="btn" style="border-color:#8888ff; color:#aaaaff;" onclick="explainGodPower('boukyaku_na')">▶ 『名忘却の才』を行使</button>
+      <button class="btn" style="border-color:#aaff00; color:#aaff00;" onclick="goToKumiRoom()">▶ 『卓組みの間』へ渡る</button>
     `;
   }
 

@@ -37,6 +37,15 @@
       "participantCount": {
         ".validate": "newData.isNumber() && newData.val() >= 2 && newData.val() <= 200"
       },
+      "holdResults": {
+        ".validate": "newData.isBoolean()"
+      },
+      "revealed": {
+        ".validate": "newData.isBoolean()"
+      },
+      "revealedAt": {
+        ".validate": "newData.isNumber()"
+      },
       "$other": {
         ".validate": false
       }

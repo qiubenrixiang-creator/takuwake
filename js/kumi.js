@@ -5,10 +5,72 @@
 //  結果を「反映する」と、各自の記録画面にも最終的な卓が表示されます。
 // ============================================================
 
+const KUMI_PASSWORD = 'たくぐみ';   // 館の名前入力でもこの言葉で入れます
+
+let holdState = { hold: false, revealed: false };
 let roster = [];        // [{ id, name, table, color, exp, leave, profile, lockedTable }]
 let capacities = [];
 let groups = null;      // [[id, ...], ...]
 let selectedId = null;
+
+// ---- 扉の錠 ------------------------------------------------
+// 神の座か合言葉から入った場合だけ通します。
+// URLを直接叩かれても、ここで止まります。
+function isUnlocked() {
+  try { return sessionStorage.getItem('takuwake_kumi_pass') === '1'; }
+  catch (e) { return false; }
+}
+
+function tryUnlock() {
+  const word = document.getElementById('lock-word').value.trim();
+  if (word !== KUMI_PASSWORD) {
+    document.getElementById('lock-word').value = '';
+    document.getElementById('lock-word').placeholder = '違うようじゃ';
+    return;
+  }
+  try { sessionStorage.setItem('takuwake_kumi_pass', '1'); } catch (e) { /* 一度きりの入室になる */ }
+  document.getElementById('lock-screen').style.display = 'none';
+}
+
+// ---- 待機モード --------------------------------------------
+function renderHoldStatus() {
+  const el = document.getElementById('hold-status');
+  const btn = document.getElementById('btn-hold');
+  if (!el || !btn) return;
+
+  if (!holdState.hold) {
+    el.className = 'host-note';
+    el.textContent = '今は【即時公開】じゃ。診断を終えた者には、その場で仮の卓が見える。';
+    btn.textContent = '▶ 結果を伏せる（待機モード）';
+  } else if (!holdState.revealed) {
+    el.className = 'host-note';
+    el.textContent = '今は【待機モード】じゃ。皆の画面には「しばし待て」と出ておる。';
+    btn.textContent = '▶ 即時公開に戻す';
+  } else {
+    el.className = 'host-note';
+    el.textContent = '席を告げ終えたぞい。皆の画面に卓が映っておる。';
+    btn.textContent = '▶ もう一度伏せる';
+  }
+}
+
+function toggleHold() {
+  const next = !holdState.hold || holdState.revealed;
+  // 伏せ直すときは公開フラグも下ろす
+  db.ref('config').update({ holdResults: next, revealed: false })
+    .then(() => {
+      setMessage(next
+        ? '結果を伏せたぞい。<br>診断を終えた者には「しばし待て」と伝わる。'
+        : '即時公開に戻したぞい。');
+    })
+    .catch(() => showNotice('切り替えできませんでした。Firebaseのルールを確認してください。'));
+}
+
+db.ref('config').on('value', (snap) => {
+  const c = snap.val() || {};
+  holdState.hold = !!c.holdResults;
+  holdState.revealed = !!c.revealed;
+  renderHoldStatus();
+}, () => { /* 読めない場合は即時公開のまま */ });
 
 // ---- 表示のこまごま ----------------------------------------
 function showNotice(message) {
@@ -153,8 +215,10 @@ function toggleLock(id) {
 // ---- 反映 --------------------------------------------------
 function applyToRoster() {
   if (!groups) { showNotice('先に「卓を組む」を押すのじゃ。'); return; }
-  if (!confirm('この割り当てを全員の記録画面に反映します。よろしいですか。')) return;
+  if (!confirm('この割り当てを全員に告げます。よろしいですか。')) return;
 
+  // 先に席を書き込み、すべて終わってから公開の合図を出す。
+  // 順番を逆にすると、席が空のまま公開される者が出てしまいます。
   const jobs = [];
   groups.forEach((ids, ti) => {
     const info = tableInfo(ti);
@@ -164,12 +228,13 @@ function applyToRoster() {
   });
 
   Promise.all(jobs)
+    .then(() => db.ref('config').update({ revealed: true, revealedAt: Date.now() }))
     .then(() => {
-      setMessage('全員に反映したぞい。<br>各自の「📜 記録」に最終的な卓が表示される。');
-      showNotice('反映しました。');
+      setMessage('全員に席を告げたぞい。<br>待っておった者の画面に、一斉に卓が映し出される。');
+      showNotice('席を告げました。');
     })
     .catch(() => {
-      showNotice('反映できませんでした。通信とFirebaseのルールを確認してください。');
+      showNotice('告げられませんでした。通信とFirebaseのルールを確認してください。');
     });
 }
 
@@ -316,4 +381,11 @@ function copyResult() {
     .catch(() => { window.prompt('下の文字を選択してコピーしてください。', text); });
 }
 
-document.addEventListener('DOMContentLoaded', renderAll);
+document.addEventListener('DOMContentLoaded', () => {
+  if (isUnlocked()) document.getElementById('lock-screen').style.display = 'none';
+  document.getElementById('lock-word').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); tryUnlock(); }
+  });
+  renderHoldStatus();
+  renderAll();
+});
