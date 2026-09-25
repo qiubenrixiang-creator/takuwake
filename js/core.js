@@ -174,6 +174,9 @@ const ICONS = {
   chest:  ['..####..', '.######.', '.#.##.#.', '########', '#..##..#', '#..##..#', '########', '........'],
   key:    ['.###....', '#...#...', '#...####', '#...#.#.', '.###....', '........', '........', '........'],
   door:   ['.######.', '.#....#.', '.#....#.', '.#....#.', '.#...##.', '.#....#.', '.#....#.', '.######.'],
+  book:   ['.######.', '.#..#.#.', '.#..#.#.', '.#..#.#.', '.#..#.#.', '.#..#.#.', '.######.', '........'],
+  crown:  ['........', '#..##..#', '#.####.#', '########', '########', '.######.', '.######.', '........'],
+  lock:   ['..####..', '.#....#.', '.#....#.', '########', '###..###', '###..###', '########', '........'],
   star:   ['...##...', '...##...', '########', '.######.', '..####..', '.##..##.', '##....##', '........']
 };
 
@@ -230,6 +233,130 @@ function bindTopbar(onBgmOn) {
     paint();
   });
   paint();
+}
+
+// ---- きろく（図鑑・しょうごう）-------------------------------
+// この 端末の 中だけに のこります。小さな かずだけ なので 重く なりません。
+//   runs   … しんだんを おえた かず
+//   met    … しんだんで であった たく { A: { n: かいすう, first: '2026-09-25' } }
+//   sat    … はっぴょうで じっさいに すわった たく（おなじ かたち）
+//   meets  … すわった かいの しるし（はっぴょうの 時刻。おなじ かいを 2どと かぞえない）
+//   recent … さいごの 3かいの しんだん けっか
+//   themes … しんだんを おえた ときの がめん（night / day）
+//   flags  … ふしぎな ふるまいの しるし
+const Record = {
+  load() {
+    const r = Store.get('record', null) || {};
+    return {
+      runs: r.runs | 0,
+      met: r.met || {},
+      sat: r.sat || {},
+      meets: Array.isArray(r.meets) ? r.meets : [],
+      recent: Array.isArray(r.recent) ? r.recent : [],
+      themes: r.themes || {},
+      flags: r.flags || {}
+    };
+  },
+  save(r) { Store.set('record', r); },
+  clear() { ['record', 'titles', 'title', 'fresh'].forEach((k) => Store.remove(k)); }
+};
+
+function todayStr() {
+  const d = new Date();
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+
+// 図鑑で「NEW」を つける もの（'table:A' や しょうごうの key）
+function markFresh(keys) {
+  if (!keys.length) return;
+  const f = Store.get('fresh', []);
+  keys.forEach((k) => { if (f.indexOf(k) < 0) f.push(k); });
+  Store.set('fresh', f);
+}
+
+// しんだんを おえた とき。run = { table, answers, backs, ms, hour, theme }
+function recordRun(run) {
+  const r = Record.load();
+  r.runs++;
+  const fresh = [];
+  if (!r.met[run.table]) { r.met[run.table] = { n: 0, first: todayStr() }; fresh.push('table:' + run.table); }
+  r.met[run.table].n++;
+  r.recent = r.recent.concat(run.table).slice(-3);
+  r.themes[run.theme] = 1;
+  const a = run.answers;
+  if (a.length && a.every((x) => x === 1)) r.flags.middle = 1;
+  if (a.length && a.every((x) => x !== 1)) r.flags.extreme = 1;
+  if (run.backs === 0 && run.ms <= 20000) r.flags.swift = 1;
+  if (run.backs >= 5) r.flags.waver = 1;
+  if (run.hour >= 0 && run.hour < 4) r.flags.owl = 1;
+  Record.save(r);
+  markFresh(fresh);
+  return earnTitles(r);
+}
+
+// はっぴょうで じぶんの せきを みた とき（at は はっぴょうの 時刻）
+function recordSeat(table, at) {
+  const r = Record.load();
+  if (!TABLES[table] || r.meets.indexOf(at) >= 0) return [];
+  r.meets = r.meets.concat(at).slice(-100);
+  if (!r.sat[table]) r.sat[table] = { n: 0, first: todayStr() };
+  r.sat[table].n++;
+  Record.save(r);
+  return earnTitles(r);
+}
+
+function recordFlag(name) {
+  const r = Record.load();
+  r.flags[name] = 1;
+  Record.save(r);
+  return earnTitles(r);
+}
+
+// しょうごうの 条件（data.js の TITLES と key で つながる）
+const TITLE_RULES = {
+  visit1:   (r) => r.runs >= 1,
+  visit5:   (r) => r.runs >= 5,
+  visit15:  (r) => r.runs >= 15,
+  met4:     (r) => Object.keys(r.met).length >= 4,
+  met8:     (r) => TABLE_KEYS.every((k) => r.met[k]),
+  sat1:     (r) => r.meets.length >= 1,
+  meets3:   (r) => r.meets.length >= 3,
+  sat8:     (r) => TABLE_KEYS.every((k) => r.sat[k]),
+  swift:    (r) => !!r.flags.swift,
+  waver:    (r) => !!r.flags.waver,
+  middle:   (r) => !!r.flags.middle,
+  extreme:  (r) => !!r.flags.extreme,
+  shift:    (r) => r.recent.length >= 3 && new Set(r.recent).size === 3,
+  poke:     (r) => !!r.flags.poke,
+  owl:      (r) => !!r.flags.owl,
+  daynight: (r) => !!(r.themes.night && r.themes.day)
+};
+TABLE_KEYS.forEach((k) => { TITLE_RULES['lord' + k] = (r) => !!(r.met[k] && r.met[k].n >= 3); });
+
+// 条件を みたした しょうごうを てに いれて、あたらしく 手に いれた ものを かえす
+function earnTitles(r) {
+  const have = Store.get('titles', {});
+  const add = [];
+  TITLES.forEach((t) => {
+    if (have[t.key] || t.key === 'legend') return;
+    const rule = TITLE_RULES[t.key];
+    if (rule && rule(r)) { have[t.key] = todayStr(); add.push(t); }
+  });
+  const legend = TITLES.find((t) => t.key === 'legend');
+  if (legend && !have.legend && TITLES.every((t) => t.key === 'legend' || have[t.key])) { have.legend = todayStr(); add.push(legend); }
+  if (add.length) { Store.set('titles', have); markFresh(add.map((t) => t.key)); }
+  return add;
+}
+
+function titleByKey(key) { return TITLES.find((t) => t.key === key) || null; }
+
+// ひとに みせる しょうごう（えらんで いれば それ、なければ さいごに 手に いれた もの）
+function shownTitle() {
+  const have = Store.get('titles', {});
+  const pick = Store.get('title', '');
+  if (pick && have[pick] && titleByKey(pick)) return titleByKey(pick);
+  const keys = Object.keys(have).filter((k) => titleByKey(k));
+  return keys.length ? titleByKey(keys[keys.length - 1]) : null;
 }
 
 // ---- 診断の 計算 ----------------------------------------

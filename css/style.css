@@ -61,6 +61,9 @@ body::after {
   opacity: .5; transform: translateZ(0);
 }
 html[data-theme="day"] body::after { display: none; }
+/* ドット文字は 細いので、あかるい 画面では 少し 太らせる（BGL と 同じ）*/
+html[data-theme="day"] body { text-shadow: 0.5px 0 0 currentColor; }
+html[data-theme="day"] .tag { border-color: var(--muted); color: var(--muted); }
 
 /* 酒場の ドット絵（BGL の 背景）と、その上の 幕 */
 #bg {
@@ -87,13 +90,20 @@ input:focus-visible, button:focus-visible, a:focus-visible { outline: 3px solid 
   transform: translateZ(0); isolation: isolate;
 }
 .topbar::before { content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: 100vh; background: var(--panel); }
-.topbar-in { display: flex; align-items: center; gap: 7px; height: 56px; max-width: 600px; margin: 0 auto; padding: 0 12px; }
-.brand { display: flex; align-items: center; gap: 8px; text-decoration: none; font-size: 13px; letter-spacing: .08em; color: var(--accent); white-space: nowrap; margin-right: auto; }
+.topbar-in { display: flex; align-items: center; gap: 10px; height: 56px; max-width: 600px; margin: 0 auto; padding: 4px 14px 0; }
+.brand { display: flex; align-items: center; gap: 9px; text-decoration: none; font-size: 14px; letter-spacing: .1em; color: var(--accent); white-space: nowrap; margin-right: auto; }
 .brand .ico { width: 22px; height: 22px; display: block; }
 .icon-btn {
   border: 2px solid var(--frame); background: var(--bg-2); color: var(--text);
-  padding: 5px 8px; font-size: 12.5px; letter-spacing: .08em; cursor: pointer;
-  min-width: 38px; min-height: 38px; position: relative; z-index: 1;
+  padding: 7px 11px; font-size: 12.5px; letter-spacing: .08em; cursor: pointer;
+  position: relative; z-index: 1;
+}
+.icon-btn.snd { min-width: 38px; padding: 5px 8px; letter-spacing: 0; }
+@media (max-width: 560px) {
+  .brand { font-size: 12px; letter-spacing: .02em; gap: 7px; }
+  .topbar-in { gap: 7px; padding: 0 12px; }
+  .icon-btn.snd { min-width: 34px; padding: 5px 6px; }
+  .icon-btn { padding: 5px 8px; }
 }
 .icon-btn:active { transform: translate(1px, 1px); }
 .icon-btn.off { opacity: .4; text-decoration: line-through; color: var(--muted); }
@@ -112,11 +122,19 @@ input:focus-visible, button:focus-visible, a:focus-visible { outline: 3px solid 
 }
 .tab .i { width: 22px; height: 22px; display: block; }
 .tab[aria-current="true"] { color: var(--accent); }
+.tab[aria-current="true"] .i { filter: drop-shadow(0 0 3px currentColor); }
 .tab .dot { position: absolute; top: 4px; right: calc(50% - 18px); width: 9px; height: 9px; background: var(--accent); border: 2px solid var(--panel); }
 
-/* ---- ページの 見出し ---- */
-.lede { font-size: 21px; line-height: 1.5; color: var(--accent); margin: 14px 0 10px; }
+/* ---- ページの 見出し（BGL と 同じ）---- */
+.page { padding: 18px 0 30px; }
+.lede { font-size: 21px; line-height: 1.5; color: var(--accent); margin: 0 0 8px; }
 .lede::before { content: "▶ "; font-size: 16px; }
+.sub { color: var(--muted); font-size: 13px; margin: 0 0 18px; line-height: 1.7; }
+.count { font-size: 12.5px; color: var(--muted); margin: 0 0 10px; }
+.field-h { font-size: 15px; margin: 0 0 10px; color: var(--accent-2); }
+.field-h em { font-style: normal; font-size: 11.5px; color: var(--muted); margin-left: 8px; }
+.catlabel { font-size: 11.5px; color: var(--muted); margin: 14px 0 6px; }
+.divider { height: 3px; background: var(--frame); opacity: .35; margin: 24px 0 18px; }
 
 /* ---- ウィンドウ（ドラクエ風）---- */
 .win { background: var(--panel); border: 3px solid var(--frame); box-shadow: var(--shadow); padding: 14px 15px; position: relative; }
@@ -227,7 +245,7 @@ input::placeholder { color: var(--muted); opacity: .75; }
   position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translateX(-50%);
   background: var(--panel); color: var(--text); border: 3px solid var(--frame); box-shadow: var(--shadow);
   padding: 10px 16px; font-size: 13px; z-index: 150; opacity: 0; pointer-events: none; transition: opacity .15s;
-  max-width: 88vw; text-align: center; white-space: nowrap;
+  width: max-content; max-width: 88vw; text-align: center; line-height: 1.6;
 }
 #toast.show { opacity: 1; }
 
@@ -249,3 +267,55 @@ html[data-theme="day"] .win > h2.tc { color: var(--tc-day, var(--tc, var(--accen
 /* 小さな「もどる」 */
 .back-row { display: flex; }
 .back-row .btn { color: var(--muted); border-color: var(--muted); }
+
+/* ---- ずかん ---- */
+/* じぶんの カード（BGL の ぼうけんしゃカードと 同じ）*/
+.adv { border: 3px solid var(--frame); background: var(--panel); box-shadow: var(--shadow); padding: 14px; }
+.adv-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; border-bottom: 2px solid var(--frame); padding-bottom: 6px; margin-bottom: 10px; }
+.adv-name { color: var(--accent); font-size: 20px; line-height: 1.4; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adv-lv { font-size: 13px; color: var(--muted); flex: none; }
+.adv-title { display: flex; align-items: baseline; gap: 10px; font-size: 16px; }
+.adv-title small { font-size: 11.5px; color: var(--muted); flex: none; }
+.adv-nums { display: flex; flex-wrap: wrap; gap: 2px 14px; font-size: 12px; color: var(--muted); margin-top: 6px; }
+.adv-nums b { font-weight: 400; color: var(--text); }
+
+/* たくの ずかん：BGL の どうぐの ならべかた（3れつ・はんぱは のばす）*/
+.zk-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.zk-card {
+  flex: 1 1 calc(33.333% - 8px); min-width: 0; position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 10px 4px 9px;
+  background: var(--panel); border: 3px solid var(--frame); box-shadow: var(--shadow);
+  color: var(--text); text-align: center; cursor: pointer;
+}
+.zk-card:active { transform: translate(2px, 2px); box-shadow: none; }
+.zk-card.locked { cursor: default; border-style: dashed; border-color: var(--muted); box-shadow: none; color: var(--muted); }
+.zk-card.locked:active { transform: none; }
+.zk-mark { font-size: 22px; line-height: 1.3; }
+.zk-name { font-size: 12px; line-height: 1.35; }
+.zk-sub { font-size: 10.5px; color: var(--muted); line-height: 1.4; }
+.zk-new { position: absolute; top: -9px; right: -4px; font-size: 10px; line-height: 1.5; padding: 0 4px; background: var(--danger); color: #fff; }
+.zk-new.inline { position: static; margin-left: 6px; vertical-align: 1px; }
+.zk-facts { display: flex; flex-direction: column; font-size: 13px; color: var(--muted); line-height: 1.8; }
+
+/* しょうごうの いちらん（BGL の しょうごうの いちらんと 同じ 形）*/
+.tl .catlabel:first-child { margin-top: 0; }
+.tl-row {
+  display: flex; align-items: flex-start; gap: 8px; width: 100%; padding: 6px 4px;
+  background: none; border: 0; border-bottom: 2px solid var(--line); color: var(--muted); text-align: left; font-size: 13px;
+}
+.tl-row.got { color: var(--accent); cursor: pointer; }
+.tl-row.got:active { background: var(--bg-2); }
+.tl-row.on { background: var(--text); color: var(--panel); }
+.tl-row.on .tl-how, .tl-row.on .tl-date { color: var(--panel); }
+.tl-mark { flex: none; width: 1em; }
+.tl-body { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.tl-name { font-size: 14px; line-height: 1.6; }
+.tl-how { font-size: 11px; color: var(--muted); line-height: 1.6; }
+.tl-date { flex: none; font-size: 11px; color: var(--muted); padding-top: 3px; }
+
+/* あたらしい しょうごう（結果の 画面）*/
+.new-titles { border-color: var(--accent); }
+.nt { margin-bottom: 10px; }
+.nt-name { display: flex; align-items: center; gap: 8px; font-size: 17px; color: var(--accent); }
+.nt-ico { width: 20px; height: 20px; flex: none; }
+.nt-desc { font-size: 13px; color: var(--muted); line-height: 1.7; }

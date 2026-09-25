@@ -20,8 +20,8 @@
   <header class="topbar">
     <div class="topbar-in">
       <a class="brand" href="./"><span class="ico" data-icon="yakata"></span><span>たくわけの やかた</span></a>
-      <button class="icon-btn" id="btn-bgm" type="button" aria-label="BGM">♪</button>
-      <button class="icon-btn" id="btn-se" type="button" aria-label="こうかおん">SE</button>
+      <button class="icon-btn snd" id="btn-bgm" type="button" aria-label="BGM">♪</button>
+      <button class="icon-btn snd" id="btn-se" type="button" aria-label="こうかおん">SE</button>
       <button class="icon-btn" id="btn-theme" type="button" aria-label="よる／ひる">よる</button>
     </div>
   </header>
@@ -31,6 +31,7 @@
   <nav class="tabbar" aria-label="メニュー">
     <div class="tabbar-in">
       <button class="tab" type="button" data-tab="ask"><span class="i" data-icon="ask"></span>しんだん</button>
+      <button class="tab" type="button" data-tab="zukan"><span class="i" data-icon="book"></span>ずかん<span class="dot" id="zukan-dot" hidden></span></button>
       <button class="tab" type="button" data-tab="seat"><span class="i" data-icon="seat"></span>せき<span class="dot" id="seat-dot" hidden></span></button>
       <a class="tab" id="tab-library" href="../board-game-library/"><span class="i" data-icon="chest"></span>ライブラリー</a>
     </div>

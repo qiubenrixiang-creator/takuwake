@@ -41,7 +41,7 @@ function nushi(textEl, name, icon) {
 }
 
 function show(children) {
-  const wrap = h('div', { class: 'screen-in' }, children);
+  const wrap = h('section', { class: 'page screen-in' }, children);
   $screen.replaceChildren(wrap);
   paintIcons(wrap);
   window.scrollTo(0, 0);

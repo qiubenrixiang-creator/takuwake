@@ -22,6 +22,7 @@ const state = {
   prePicked: {},      // じゅんびの 問いで えらんだ もの（もどった ときに 印を つける）
   preIndex: 0,
   answers: [],
+  run: null,          // この しんだんの ようす（はじめた 時刻・もどった かず）
   started: false
 };
 
@@ -63,8 +64,9 @@ function finishTyping() {
 }
 
 // ---- 画面を 組み立てる ------------------------------------
-// tab      … したの タブの どれを 光らせるか（'ask' / 'seat'）
+// tab      … したの タブの どれを 光らせるか（'ask' / 'zukan' / 'seat'）
 // lede     … いちばん 上の 見出し
+// sub      … 見出しの 下の 小さな 説明（BGL と 同じ）
 // progress … { label, now, total }
 // text     … ぬしの セリフ
 // extra    … セリフの 下に ならべる ウィンドウ
@@ -75,9 +77,10 @@ function finishTyping() {
 function render(opts) {
   finishTyping();
   setTab(opts.tab || 'ask');
-  const wrap = h('div', { class: 'screen-in' });
+  const wrap = h('section', { class: 'page screen-in' });
 
   if (opts.lede) wrap.appendChild(h('h1', { class: 'lede', text: opts.lede }));
+  if (opts.sub) wrap.appendChild(h('p', { class: 'sub', text: opts.sub }));
 
   if (opts.progress) {
     const pct = Math.round(100 * opts.progress.now / opts.progress.total);
@@ -89,7 +92,7 @@ function render(opts) {
 
   const textEl = h('div', { class: 'msg-text' });
   const msg = h('section', { class: 'win msg', onclick: finishTyping }, [
-    h('div', { class: 'msg-icon', 'data-icon': SITE.hostIcon, 'aria-hidden': 'true' }),
+    h('div', { class: 'msg-icon', 'data-icon': SITE.hostIcon, 'aria-hidden': 'true', onclick: pokeNushi }),
     h('div', { class: 'msg-body' }, [h('div', { class: 'msg-name', text: SITE.host }), textEl]),
     h('span', { class: 'msg-next', text: '▼', 'aria-hidden': 'true' })
   ]);
@@ -152,6 +155,7 @@ function setTab(name) {
 $tabs.forEach((t) => t.addEventListener('click', () => {
   Sound.se('cursor');
   if (t.dataset.tab === 'seat') seatsScreen();
+  else if (t.dataset.tab === 'zukan') zukanScreen();
   else titleScreen();
 }));
 const $library = document.getElementById('tab-library');
@@ -162,6 +166,32 @@ function paintSeatDot() {
   const dot = document.getElementById('seat-dot');
   const data = Store.get('seats', null);
   if (dot) dot.hidden = !(data && data.at && Store.get('seatsSeen', 0) !== data.at);
+}
+
+// 図鑑に まだ 見ていない ものが あれば、「ずかん」タブに 点を つける
+function paintZukanDot() {
+  const dot = document.getElementById('zukan-dot');
+  if (dot) dot.hidden = !Store.get('fresh', []).length;
+}
+
+// あたらしく 手に いれた しょうごうを 知らせる
+function announceTitles(list) {
+  if (!list || !list.length) return;
+  toast('しょうごう「' + list[list.length - 1].name + '」を てに いれた！');
+  paintZukanDot();
+}
+
+// ぬしの かおを すばやく 3かい たたくと……
+let pokes = [];
+function pokeNushi() {
+  const now = Date.now();
+  pokes = pokes.filter((t) => now - t < 1500).concat(now);
+  if (pokes.length < 3) return;
+  pokes = [];
+  const got = Store.get('titles', {}).poke;
+  Sound.se(got ? 'cancel' : 'fanfare');
+  say(got ? LINES.poke2 : LINES.poke);
+  if (!got) announceTitles(recordFlag('poke'));
 }
 
 // ---- 画面たち ----------------------------------------------
@@ -178,6 +208,7 @@ function titleScreen() {
   }
   render({
     lede: 'せきを きめる しんだん',
+    sub: '8つの しつもんに こたえると、にた ものどうしが おなじ たくに あつまります。',
     text: LINES.welcome,
     after: extra,
     choices: [{ label: 'しんだんを はじめる', kind: 'hero', onPick: () => { Sound.se('decide'); nameScreen(); } }]
@@ -214,6 +245,7 @@ function submitName(raw) {
   state.name = name;
   Store.set('name', name);
   state.preIndex = 0;
+  state.run = { start: Date.now(), backs: 0 };
   Sound.se('decide');
   preScreen();
 }
@@ -249,6 +281,7 @@ function preScreen() {
     })),
     back: { label: 'ひとつ もどる', onPick: () => {
       Sound.se('cancel');
+      if (state.run) state.run.backs++;
       if (i > 0) { state.preIndex = i - 1; preScreen(); } else nameScreen();
     } }
   });
@@ -273,6 +306,7 @@ function questionScreen(i) {
     })),
     back: { label: 'ひとつ もどる', onPick: () => {
       Sound.se('cancel');
+      if (state.run) state.run.backs++;
       if (i > 0) questionScreen(i - 1);
       else { state.preIndex = PRE_QUESTIONS.length - 1; preScreen(); }
     } }
@@ -292,10 +326,18 @@ function finish() {
     at: Date.now()
   };
   Store.set('last', res);
+  const run = state.run || { start: 0, backs: 99 };
+  const got = recordRun({
+    table: r.table, answers: state.answers.slice(), backs: run.backs,
+    ms: Date.now() - run.start, hour: new Date().getHours(), theme: Theme.get()
+  });
   state.answers = [];
   state.prePicked = {};
+  state.run = null;
   Sound.se('fanfare');
-  resultScreen(res, true);
+  resultScreen(res, true, got);
+  announceTitles(got);
+  paintZukanDot();
 }
 
 function statRows(stats) {
@@ -311,10 +353,12 @@ function statRows(stats) {
   return rows;
 }
 
-function resultScreen(res, fresh) {
+function resultScreen(res, fresh, newTitles) {
   const t = TABLES[res.table];
+  const shown = shownTitle();
   const head = h('section', { class: 'win' }, [
     h('h2', { text: res.name + ' の たく' }),
+    shown ? h('div', { class: 'result-who', text: 'しょうごう：' + shown.name }) : null,
     h('div', { class: 'result-name tc', style: tableTone(res.table) }, [h('span', { class: 'sq', 'aria-hidden': 'true' }), t.label + ' ' + t.name]),
     h('div', { class: 'result-type', text: t.type }),
     h('p', { class: 'result-desc', text: t.desc })
@@ -333,10 +377,19 @@ function resultScreen(res, fresh) {
   if (Store.get('seats', null)) choices.push({ label: 'きょうの せきを みる', kind: 'primary', onPick: () => { Sound.se('decide'); seatsScreen(); } });
   choices.push({ label: 'もういちど しんだん する', onPick: () => { Sound.se('decide'); nameScreen(); } });
 
+  const extra = [head, code, stats];
+  if (newTitles && newTitles.length) {
+    extra.unshift(h('section', { class: 'win new-titles' }, [
+      h('h2', { text: 'あたらしい しょうごう' })
+    ].concat(newTitles.map((nt) => h('div', { class: 'nt' }, [
+      h('div', { class: 'nt-name' }, [h('span', { class: 'nt-ico', 'data-icon': 'crown', 'aria-hidden': 'true' }), nt.name]),
+      h('div', { class: 'nt-desc', text: nt.desc })
+    ]))).concat([h('button', { class: 'btn small', type: 'button', text: 'ずかんで みる ▶', onclick: () => { Sound.se('decide'); zukanScreen(); } })])));
+  }
   render({
     lede: 'しんだん けっか',
-    text: fresh ? LINES.result : LINES.resume.replace('{name}', res.name),
-    extra: [head, code, stats],
+    text: fresh ? (newTitles && newTitles.length ? LINES.newTitle : LINES.result) : LINES.resume.replace('{name}', res.name),
+    extra,
     choices,
     back: { label: 'はじめに もどる', onPick: () => { Sound.se('cancel'); titleScreen(); } }
   });
@@ -359,6 +412,7 @@ function seatsScreen() {
   });
   const me = state.name || Store.get('name', '');
   const mine = groups.find((g) => g.names.indexOf(me) >= 0);
+  if (mine) setTimeout(() => announceTitles(recordSeat(mine.key, data.at || 0)), 0);
   // じぶんの 卓を いちばん 上に
   if (mine) { groups.splice(groups.indexOf(mine), 1); groups.unshift(mine); }
 
@@ -371,6 +425,145 @@ function seatsScreen() {
     lede: 'きょうの せき',
     text: mine ? LINES.seatsMine.replace('{name}', me).replace('{table}', mine.label) : LINES.seatsIn,
     extra
+  });
+}
+
+// ---- ずかん ----------------------------------------------
+// であった たく（8つ）と、てに いれた しょうごうが ならびます。
+function zukanScreen() {
+  const r = Record.load();
+  const have = Store.get('titles', {});
+  const fresh = Store.get('fresh', []);
+  const shown = shownTitle();
+  const metN = TABLE_KEYS.filter((k) => r.met[k]).length;
+  const satN = TABLE_KEYS.filter((k) => r.sat[k]).length;
+  const gotN = TITLES.filter((t) => have[t.key]).length;
+  const name = state.name || Store.get('name', '') || 'たびびと';
+
+  // じぶんの カード（BGL の ぼうけんしゃカードと 同じ 形）
+  const card = h('section', { class: 'adv' }, [
+    h('div', { class: 'adv-head' }, [h('span', { class: 'adv-name', text: name }), h('span', { class: 'adv-lv', text: 'しんだん ' + r.runs + 'かい' })]),
+    h('div', { class: 'adv-title' }, [h('small', { text: 'しょうごう' }), h('span', { text: shown ? shown.name : 'まだ ない' })]),
+    h('div', { class: 'adv-nums' }, [
+      h('span', {}, ['であった たく ', h('b', { text: metN + '/8' })]),
+      h('span', {}, ['すわった たく ', h('b', { text: satN + '/8' })]),
+      h('span', {}, ['しょうごう ', h('b', { text: gotN + '/' + TITLES.length })])
+    ])
+  ]);
+
+  // たくの ずかん
+  const grid = h('div', { class: 'zk-grid' }, TABLE_KEYS.map((k) => {
+    const t = TABLES[k], m = r.met[k], sat = r.sat[k];
+    if (!m) {
+      return h('div', { class: 'zk-card locked', 'aria-label': 'まだ であって いない たく' }, [
+        h('span', { class: 'zk-mark', text: '？' }),
+        h('span', { class: 'zk-name', text: '？？？' }),
+        h('span', { class: 'zk-sub', text: 'まだ であって いない' })
+      ]);
+    }
+    return h('button', { class: 'zk-card', type: 'button', onclick: () => { Sound.se('decide'); tableScreen(k); } }, [
+      fresh.indexOf('table:' + k) >= 0 ? h('span', { class: 'zk-new', text: 'NEW' }) : null,
+      h('span', { class: 'zk-mark tc', style: tableTone(k), text: t.label }),
+      h('span', { class: 'zk-name', text: t.name }),
+      h('span', { class: 'zk-sub', text: 'しんだん ' + m.n + (sat ? '・すわった ' + sat.n : '') })
+    ]);
+  }));
+
+  // しょうごう
+  const titleBox = h('div', { class: 'win tl' });
+  TITLE_GROUPS.forEach((g) => {
+    const list = TITLES.filter((t) => t.group === g.key);
+    if (!list.length) return;
+    titleBox.appendChild(h('div', { class: 'catlabel', text: g.name }));
+    list.forEach((t) => {
+      const got = !!have[t.key];
+      const isShown = shown && shown.key === t.key;
+      const row = h(got ? 'button' : 'div', {
+        class: 'tl-row' + (got ? ' got' : '') + (isShown ? ' on' : ''),
+        type: got ? 'button' : null,
+        onclick: got ? () => pickTitle(t.key) : null
+      }, [
+        h('span', { class: 'tl-mark', text: isShown ? '▶' : (got ? '✓' : '・') }),
+        h('span', { class: 'tl-body' }, [
+          h('span', { class: 'tl-name' }, [got ? t.name : '？？？', fresh.indexOf(t.key) >= 0 ? h('span', { class: 'zk-new inline', text: 'NEW' }) : null]),
+          h('span', { class: 'tl-how', text: got ? t.desc : (t.secret ? 'ひみつ：' + t.how : t.how) })
+        ]),
+        h('span', { class: 'tl-date', text: got ? have[t.key].slice(5).replace('-', '/') : '' })
+      ]);
+      titleBox.appendChild(row);
+    });
+  });
+
+  render({
+    tab: 'zukan',
+    lede: 'ずかん',
+    sub: 'であった たくと、てに いれた しょうごう。この スマホの なかに のこります。',
+    text: r.runs ? LINES.zukan : LINES.zukanNone,
+    extra: [
+      card,
+      h('div', {}, [h('h2', { class: 'field-h' }, ['たくの ずかん', h('em', { text: metN + ' / 8' })]), grid]),
+      h('div', {}, [
+        h('h2', { class: 'field-h' }, ['しょうごう', h('em', { text: gotN + ' / ' + TITLES.length })]),
+        h('p', { class: 'count', text: 'てに いれた しょうごうを たたくと、それを なのれます。もう いちど たたくと じどうに もどります。' }),
+        titleBox
+      ]),
+      h('div', { class: 'divider' }),
+      h('div', { class: 'back-row' }, [h('button', { class: 'btn danger small', type: 'button', text: 'ずかんの きろくを けす', onclick: clearRecord })])
+    ]
+  });
+  // 見たので NEW を けす（つぎに 開いたときには つかない）
+  Store.set('fresh', []);
+  paintZukanDot();
+}
+
+function pickTitle(key) {
+  const now = Store.get('title', '');
+  const next = now === key ? '' : key;
+  Store.set('title', next);
+  Sound.se('cursor');
+  toast(next ? '「' + titleByKey(key).name + '」を なのります' : 'しょうごうを じどうに しました');
+  const y = window.scrollY;
+  zukanScreen();
+  finishTyping();
+  window.scrollTo(0, y);
+}
+
+function clearRecord() {
+  if (!confirm('ずかんと しょうごうの きろくを すべて けします。よろしいですか。\n（まえの けっかと きょうの せきは のこります）')) return;
+  Record.clear();
+  Sound.se('cancel');
+  toast('ずかんを しろしに もどしました');
+  zukanScreen();
+}
+
+function tableScreen(key) {
+  const t = TABLES[key];
+  const r = Record.load();
+  const m = r.met[key], sat = r.sat[key];
+  const rows = [];
+  STATS.forEach((st) => {
+    const n = t.profile[st.key];
+    const blocks = h('span', { class: 'blocks' });
+    for (let i = 0; i < 4; i++) blocks.appendChild(h('span', { class: 'block' + (i < n ? ' on' : '') }));
+    rows.push(h('span', { text: st.name }), blocks, h('span', { class: 'stat-word', text: n >= 3 ? st.high : (n <= 1 ? st.low : 'ふつう') }));
+  });
+  render({
+    tab: 'zukan',
+    lede: 'たくの ずかん',
+    text: t.label + '……' + t.name + 'じゃな。\n' + t.desc,
+    extra: [
+      h('section', { class: 'win' }, [
+        h('h2', { class: 'colored tc', style: tableTone(key), text: t.label + ' ' + t.name }),
+        h('div', { class: 'result-type', text: t.type }),
+        h('div', { class: 'zk-facts' }, [
+          h('span', { text: 'はじめて であった ひ：' + (m ? m.first.replace(/-/g, '/') : '―') }),
+          h('span', { text: 'しんだんで みちびかれた：' + (m ? m.n : 0) + 'かい' }),
+          h('span', { text: 'じっさいに すわった：' + (sat ? sat.n : 0) + 'かい' })
+        ])
+      ]),
+      h('section', { class: 'win' }, [h('h2', { text: 'たくの せいかく' }), h('div', { class: 'stats' }, rows)])
+    ],
+    back: { label: 'ずかんに もどる', onPick: () => { Sound.se('cancel'); zukanScreen(); } }
   });
 }
 
@@ -391,6 +584,7 @@ bindTopbar(() => { state.started = true; Sound.bgm('main'); });
 if (importPublished()) seatsScreen();
 else titleScreen();
 paintSeatDot();
+paintZukanDot();
 
 // すでに 開いている ページで リンクを ひらくと、# から後ろだけが 変わって
 // 読みこみ直しに ならないことが ある。その 変化も ひろう。
