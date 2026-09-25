@@ -76,6 +76,7 @@ function finishTyping() {
 // back     … 小さな「もどる」ボタン（{ label, onPick }）
 function render(opts) {
   finishTyping();
+  stopIdleWatch();
   setTab(opts.tab || 'ask');
   const wrap = h('section', { class: 'page screen-in' });
 
@@ -91,7 +92,7 @@ function render(opts) {
   }
 
   const textEl = h('div', { class: 'msg-text' });
-  const msg = h('section', { class: 'win msg', onclick: finishTyping }, [
+  const msg = h('section', { class: 'win msg', onclick: interrupt }, [
     h('div', { class: 'msg-icon', 'data-icon': SITE.hostIcon, 'aria-hidden': 'true', onclick: pokeNushi }),
     h('div', { class: 'msg-body' }, [h('div', { class: 'msg-name', text: SITE.host }), textEl]),
     h('span', { class: 'msg-next', text: '▼', 'aria-hidden': 'true' })
@@ -118,7 +119,7 @@ function render(opts) {
     opts.choices.forEach((c) => {
       const cls = 'btn' + (c.kind ? ' ' + c.kind : '') + (c.picked ? ' picked' : '');
       const kids = c.kind === 'hero' ? [h('span', { class: 'arrow', text: '▶', 'aria-hidden': 'true' }), c.label] : [c.label];
-      col.appendChild(h('button', { class: cls, type: 'button', onclick: () => { finishTyping(); c.onPick(); } }, kids));
+      col.appendChild(h('button', { class: cls, type: 'button', onclick: () => { interrupt(); c.onPick(); } }, kids));
     });
     stack.appendChild(col);
   }
@@ -176,15 +177,24 @@ function paintZukanDot() {
 }
 
 // あたらしく 手に いれた しょうごうを 知らせる
+// 秘宝が あれば、すこし 間を おいて 画面の まんなかに 出す
 function announceTitles(list) {
-  if (!list || !list.length) return;
-  toast('しょうごう「' + list[list.length - 1].name + '」を てに いれた！');
+  if (list && list.length) toast('しょうごう「' + list[list.length - 1].name + '」を てに いれた！');
   paintZukanDot();
+  // しんだんの とちゅうでは 出さずに、けっかの 画面まで とっておく
+  setTimeout(() => { if (!state.run) flushTreasures(); }, 700);
+}
+
+// ぬしの ことばを とちゅうで さえぎった ことを かぞえる（「静寂を破らぬ枝」のため）
+function interrupt() {
+  if (typing && state.run) state.run.skips++;
+  finishTyping();
 }
 
 // ぬしの かおを すばやく 3かい たたくと……
 let pokes = [];
 function pokeNushi() {
+  announceTitles(recordCount('pokes'));   // つついた かずを かぞえる（百たびで 秘宝）
   const now = Date.now();
   pokes = pokes.filter((t) => now - t < 1500).concat(now);
   if (pokes.length < 3) return;
@@ -243,7 +253,11 @@ function submitName(raw) {
   state.name = name;
   Store.set('name', name);
   state.preIndex = 0;
-  state.run = { start: Date.now(), backs: 0 };
+  state.run = { start: Date.now(), backs: 0, skips: 0, silent: !Sound.isBgm() && !Sound.isSe() };
+  // ぬしと おなじ 名を なのった
+  const same = [SITE.host, 'ぬし', 'たくわけのぬし'].map(normWord);
+  state.sameName = same.indexOf(normWord(name)) >= 0;
+  if (state.sameName) announceTitles(recordFlag('utsushimi'));
   Sound.se('decide');
   preScreen();
 }
@@ -261,7 +275,7 @@ function say(text) {
 function preScreen() {
   const i = state.preIndex;
   const q = PRE_QUESTIONS[i];
-  const intro = i === 0 ? LINES.preIntro.replace('{name}', state.name) + '\n' : '';
+  const intro = i === 0 ? (state.sameName ? LINES.sameName + '\n' : '') + LINES.preIntro.replace('{name}', state.name) + '\n' : '';
   render({
     lede: 'じゅんび',
     progress: { label: (i + 1) + ' / ' + PRE_QUESTIONS.length, now: i, total: PRE_QUESTIONS.length },
@@ -280,6 +294,7 @@ function preScreen() {
     back: { label: 'ひとつ もどる', onPick: () => {
       Sound.se('cancel');
       if (state.run) state.run.backs++;
+      recordCount('backs');
       if (i > 0) { state.preIndex = i - 1; preScreen(); } else nameScreen();
     } }
   });
@@ -305,6 +320,7 @@ function questionScreen(i) {
     back: { label: 'ひとつ もどる', onPick: () => {
       Sound.se('cancel');
       if (state.run) state.run.backs++;
+      recordCount('backs');
       if (i > 0) questionScreen(i - 1);
       else { state.preIndex = PRE_QUESTIONS.length - 1; preScreen(); }
     } }
@@ -324,10 +340,11 @@ function finish() {
     at: Date.now()
   };
   Store.set('last', res);
-  const run = state.run || { start: 0, backs: 99 };
+  const run = state.run || { start: 0, backs: 99, skips: 99, silent: false };
   const got = recordRun({
     table: r.table, answers: state.answers.slice(), backs: run.backs,
-    ms: Date.now() - run.start, hour: new Date().getHours(), theme: Theme.get()
+    ms: Date.now() - run.start, hour: new Date().getHours(), theme: Theme.get(),
+    skips: run.skips, silent: run.silent && !Sound.isBgm() && !Sound.isSe()
   });
   state.answers = [];
   state.prePicked = {};
@@ -390,6 +407,7 @@ function resultScreen(res, fresh, newTitles) {
       Sound.se('cancel');
       toast('けっかを けしました');
       titleScreen();
+      announceTitles(recordFlag('inkpot'));
     }, { yes: 'けす', danger: true });
   } })]);
   render({
@@ -433,6 +451,27 @@ function seatsScreen() {
     text: mine ? LINES.seatsMine.replace('{name}', me).replace('{table}', mine.label) : LINES.seatsIn,
     extra
   });
+  // せきを ひらいたまま 三分 うごかずに いると……（「万里を見透かす水晶」）
+  startIdleWatch(180000, () => announceTitles(recordFlag('crystal')));
+}
+
+// 画面に さわらずに いた 時間を はかる（さわると はじめから）
+let idle = null;
+function startIdleWatch(ms, done) {
+  stopIdleWatch();
+  const reset = () => { clearTimeout(idle.t); if (!document.hidden) idle.t = setTimeout(fire, ms); };
+  const fire = () => { stopIdleWatch(); done(); };
+  idle = { t: 0, reset };
+  ['pointerdown', 'keydown', 'wheel', 'touchmove'].forEach((e) => document.addEventListener(e, reset, { passive: true }));
+  document.addEventListener('visibilitychange', reset);
+  reset();
+}
+function stopIdleWatch() {
+  if (!idle) return;
+  clearTimeout(idle.t);
+  ['pointerdown', 'keydown', 'wheel', 'touchmove'].forEach((e) => document.removeEventListener(e, idle.reset));
+  document.removeEventListener('visibilitychange', idle.reset);
+  idle = null;
 }
 
 // ---- ずかん ----------------------------------------------
@@ -445,6 +484,23 @@ function zukanScreen() {
   const metN = TABLE_KEYS.filter((k) => r.met[k]).length;
   const satN = TABLE_KEYS.filter((k) => r.sat[k]).length;
   const gotN = TITLES.filter((t) => have[t.key]).length;
+  const trHave = Store.get('treasures', {});
+  const trN = TREASURES.filter((t) => trHave[t.key]).length;
+
+  // ひほう：名前も 手に入れ方も ふせて ならべる
+  const trGrid = h('div', { class: 'tr-grid' }, TREASURES.map((t) => {
+    if (!trHave[t.key]) {
+      return h('div', { class: 'tr-card locked', 'aria-label': 'まだ みつけて いない ひほう' }, [
+        h('span', { class: 'tr-card-ico', text: '？' }),
+        h('span', { class: 'tr-card-name', text: '？？？' })
+      ]);
+    }
+    return h('button', { class: 'tr-card', type: 'button', onclick: () => { Sound.se('decide'); showTreasure(t, false); } }, [
+      fresh.indexOf('t:' + t.key) >= 0 ? h('span', { class: 'zk-new', text: 'NEW' }) : null,
+      h('span', { class: 'tr-card-ico', 'data-icon': 't_' + t.key, 'aria-hidden': 'true' }),
+      h('span', { class: 'tr-card-name', text: t.name })
+    ]);
+  }));
   const name = state.name || Store.get('name', '') || 'たびびと';
 
   // じぶんの カード（BGL の ぼうけんしゃカードと 同じ 形）
@@ -454,7 +510,8 @@ function zukanScreen() {
     h('div', { class: 'adv-nums' }, [
       h('span', {}, ['であった たく ', h('b', { text: metN + '/8' })]),
       h('span', {}, ['すわった たく ', h('b', { text: satN + '/8' })]),
-      h('span', {}, ['しょうごう ', h('b', { text: gotN + '/' + TITLES.length })])
+      h('span', {}, ['しょうごう ', h('b', { text: gotN + '/' + TITLES.length })]),
+      h('span', {}, ['ひほう ', h('b', { text: trN + '/' + TREASURES.length })])
     ])
   ]);
 
@@ -504,18 +561,23 @@ function zukanScreen() {
   render({
     tab: 'zukan',
     lede: 'ずかん',
-    sub: 'であった たくと、てに いれた しょうごう。この スマホの なかに のこります。',
+    sub: 'であった たく・てに いれた しょうごう・みつけた ひほう。この スマホの なかに のこります。',
     text: r.runs ? LINES.zukan : LINES.zukanNone,
     extra: [
       card,
       h('div', {}, [h('h2', { class: 'field-h' }, ['たくの ずかん', h('em', { text: metN + ' / 8' })]), grid]),
+      h('div', {}, [
+        h('h2', { class: 'field-h' }, ['ひほう', h('em', { text: trN + ' / ' + TREASURES.length })]),
+        h('p', { class: 'count', text: LINES.hihouNote }),
+        trGrid
+      ]),
       h('div', {}, [
         h('h2', { class: 'field-h' }, ['しょうごう', h('em', { text: gotN + ' / ' + TITLES.length })]),
         h('p', { class: 'count', text: 'てに いれた しょうごうを たたくと、それを なのれます。もう いちど たたくと じどうに もどります。' }),
         titleBox
       ]),
       h('div', { class: 'divider' }),
-      h('div', { class: 'back-row' }, [h('button', { class: 'btn danger small', type: 'button', text: 'ずかんの きろくを けす', onclick: clearRecord })])
+      h('div', { class: 'back-row' }, [h('button', { class: 'btn danger small', type: 'button', text: 'ずかん・しょうごう・ひほうを けす', onclick: clearRecord })])
     ]
   });
   // 見たので NEW を けす（つぎに 開いたときには つかない）
@@ -536,7 +598,7 @@ function pickTitle(key) {
 }
 
 function clearRecord() {
-  ask('ずかんと しょうごうの きろくを すべて けします。よろしいですか。\n（まえの けっかと きょうの せきは のこります）', () => {
+  ask('ずかん・しょうごう・ひほうの きろくを すべて けします。よろしいですか。\n（まえの けっかと きょうの せきは のこります）', () => {
     Record.clear();
     Sound.se('cancel');
     toast('ずかんを しろしに もどしました');
@@ -642,10 +704,10 @@ function settingsScreen(line) {
   const titlesN = Object.keys(Store.get('titles', {})).length;
   const items = [
     { label: 'まえの しんだん けっか', note: 'けっか・あいことば', has: !!Store.get('last', null),
-      run: () => { Store.remove('last'); } },
+      run: () => { Store.remove('last'); setTimeout(() => announceTitles(recordFlag('inkpot')), 0); } },
     { label: 'きょうの せき', note: 'かんじが はっぴょう した せき', has: !!Store.get('seats', null),
       run: () => { Store.remove('seats'); Store.remove('seatsSeen'); } },
-    { label: 'ずかんと しょうごう', note: 'しんだん ' + r.runs + 'かい・しょうごう ' + titlesN + 'こ', has: r.runs > 0 || titlesN > 0,
+    { label: 'ずかん・しょうごう・ひほう', note: 'しんだん ' + r.runs + 'かい・しょうごう ' + titlesN + 'こ・ひほう ' + Object.keys(Store.get('treasures', {})).length + 'こ', has: r.runs > 0 || titlesN > 0 || Object.keys(Store.get('treasures', {})).length > 0,
       run: () => { Record.clear(); } },
     { label: 'ぜんぶ', note: 'なまえ・やくわり・' + SITE.room + 'の めいぼ も ふくむ', has: true,
       run: () => { clearAllLocal(); } }
@@ -703,8 +765,9 @@ function importPublished() {
   return true;
 }
 
-// BGM を よやく（読みこみは すぐ はじまり、画面に さわった 瞬間に 鳴る）
-Sound.bgm('main');
+// BGM を よやく。画面が 出おわってから 読みはじめ、画面に さわった 瞬間に 鳴る
+if (document.readyState === 'complete') Sound.bgm('main');
+else window.addEventListener('load', () => Sound.bgm('main'), { once: true });
 paintIcons(document);
 bindTopbar(() => { state.started = true; Sound.bgm('main'); });
 if (importPublished()) seatsScreen();

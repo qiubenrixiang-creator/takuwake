@@ -337,3 +337,29 @@ html[data-theme="day"] .win > h2.tc { color: var(--tc-day, var(--tc, var(--accen
 .set-item .set-text { flex: 1; min-width: 0; font-size: 14px; line-height: 1.5; }
 .set-item .set-text small { display: block; font-size: 11.5px; color: var(--muted); }
 .set-item .btn { width: auto; flex: none; }
+
+/* ---- ひほう ---- */
+.tr-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.tr-card {
+  flex: 1 1 calc(25% - 8px); min-width: 0; position: relative;
+  display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 3px 8px;
+  background: var(--panel); border: 3px solid var(--accent-2); box-shadow: var(--shadow);
+  color: var(--text); text-align: center; cursor: pointer;
+}
+.tr-card:active { transform: translate(2px, 2px); box-shadow: none; }
+.tr-card.locked { cursor: default; border-style: dashed; border-color: var(--muted); box-shadow: none; color: var(--muted); }
+.tr-card-ico { width: 30px; height: 30px; display: block; color: var(--accent); font-size: 22px; line-height: 30px; }
+.tr-card.locked .tr-card-ico { color: var(--muted); }
+.tr-card-name { font-size: 10.5px; line-height: 1.35; }
+
+/* 秘宝を 手に入れた ときの まど */
+.treasure-win { text-align: center; border-color: var(--accent); }
+.treasure-win .tr-head { font-size: 13px; color: var(--accent-2); letter-spacing: .12em; margin-bottom: 10px; }
+.treasure-win .tr-ico { width: 72px; height: 72px; margin: 0 auto 10px; color: var(--accent); }
+.treasure-win.fresh .tr-ico { animation: trPop .5s steps(5) 1; }
+@keyframes trPop { from { transform: scale(.3); opacity: 0; } to { transform: none; opacity: 1; } }
+.treasure-win .tr-name { font-size: 20px; color: var(--accent); line-height: 1.5; margin-bottom: 8px; }
+.treasure-win .tr-lore { font-size: 14px; line-height: 1.85; text-align: left; margin: 0 0 10px; white-space: normal; }
+.treasure-win .tr-lore::before { content: none; }
+.treasure-win .tr-how { font-size: 11.5px; color: var(--muted); text-align: left; line-height: 1.7; margin-bottom: 14px; }
+@media (prefers-reduced-motion: reduce) { .treasure-win.fresh .tr-ico { animation: none; } }

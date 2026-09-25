@@ -318,6 +318,9 @@ const ICONS = {
   star:   ['...##...', '...##...', '########', '.######.', '..####..', '.##..##.', '##....##', '........']
 };
 
+// 秘宝の ドット絵（data.js の TREASURES）も ICONS に くわえる
+if (typeof TREASURES !== 'undefined') TREASURES.forEach((t) => { ICONS['t_' + t.key] = t.icon; });
+
 function pix(name) {
   const map = ICONS[name];
   if (!map) return '';
@@ -427,11 +430,14 @@ const Record = {
       meets: Array.isArray(r.meets) ? r.meets : [],
       recent: Array.isArray(r.recent) ? r.recent : [],
       themes: r.themes || {},
-      flags: r.flags || {}
+      flags: r.flags || {},
+      days: Array.isArray(r.days) ? r.days : [],   // しんだんを おえた 日（ちがう 日を かぞえる）
+      pokes: r.pokes | 0,                          // ぬしの かおを つついた かず（あわせて）
+      backs: r.backs | 0                           // ひきかえした かず（あわせて）
     };
   },
   save(r) { Store.set('record', r); },
-  clear() { ['record', 'titles', 'title', 'fresh'].forEach((k) => Store.remove(k)); }
+  clear() { ['record', 'titles', 'title', 'fresh', 'treasures'].forEach((k) => Store.remove(k)); }
 };
 
 function todayStr() {
@@ -447,7 +453,8 @@ function markFresh(keys) {
   Store.set('fresh', f);
 }
 
-// しんだんを おえた とき。run = { table, answers, backs, ms, hour, theme }
+// しんだんを おえた とき。
+// run = { table, answers, backs, ms, hour, theme, skips（ぬしの ことばを さえぎった かず）, silent（音なしで おえた）}
 function recordRun(run) {
   const r = Record.load();
   r.runs++;
@@ -462,9 +469,18 @@ function recordRun(run) {
   if (run.backs === 0 && run.ms <= 20000) r.flags.swift = 1;
   if (run.backs >= 5) r.flags.waver = 1;
   if (run.hour >= 0 && run.hour < 4) r.flags.owl = 1;
+  // 秘宝の しるし
+  if (run.backs >= 10) r.flags.compass = 1;
+  if (run.backs === 0 && run.ms <= 10000) r.flags.kutsu = 1;
+  if (a.length && a.every((x) => x === 2)) r.flags.men = 1;
+  if (run.silent) r.flags.suzu = 1;
+  if (run.hour >= 18 && run.hour <= 23) r.flags.sunadokei = 1;
+  if (run.backs === 0 && run.skips === 0) r.flags.eda = 1;
+  const day = todayStr();
+  if (r.days.indexOf(day) < 0) r.days = r.days.concat(day).slice(-30);
   Record.save(r);
   markFresh(fresh);
-  return earnTitles(r);
+  return settle(r);
 }
 
 // はっぴょうで じぶんの せきを みた とき（at は はっぴょうの 時刻）
@@ -475,14 +491,94 @@ function recordSeat(table, at) {
   if (!r.sat[table]) r.sat[table] = { n: 0, first: todayStr() };
   r.sat[table].n++;
   Record.save(r);
-  return earnTitles(r);
+  return settle(r);
 }
 
 function recordFlag(name) {
   const r = Record.load();
   r.flags[name] = 1;
   Record.save(r);
-  return earnTitles(r);
+  return settle(r);
+}
+
+// あわせての かず（pokes / backs）を ふやす
+function recordCount(name, n) {
+  const r = Record.load();
+  r[name] = (r[name] | 0) + (n || 1);
+  Record.save(r);
+  return settle(r);
+}
+
+// しょうごう と 秘宝を まとめて しらべる。しょうごうの リストを かえし、
+// 秘宝は「まだ 見せていない 秘宝」に ためて おく（画面の まんなかに 出すため）。
+function settle(r) {
+  const titles = earnTitles(r);
+  earnTreasures(r);
+  return titles;
+}
+
+// ---- 秘宝 --------------------------------------------------
+// data.js の TREASURES と key で つながる。later の 秘宝は まだ 条件が ない。
+const TREASURE_RULES = {
+  crystal:   (r) => !!r.flags.crystal,
+  compass:   (r) => !!r.flags.compass,
+  inkpot:    (r) => !!r.flags.inkpot,
+  key:       (r) => r.days.length >= 3,
+  shiori:    (r) => TABLE_KEYS.every((k) => r.sat[k]),
+  hige:      (r) => r.pokes >= 100,
+  kutsu:     (r) => !!r.flags.kutsu,
+  men:       (r) => !!r.flags.men,
+  suzu:      (r) => !!r.flags.suzu,
+  himo:      (r) => r.backs >= 30,
+  sunadokei: (r) => !!r.flags.sunadokei,
+  utsushimi: (r) => !!r.flags.utsushimi,
+  eda:       (r) => !!r.flags.eda,
+  sand:      (r) => TABLE_KEYS.every((k) => r.met[k]) && !!Store.get('titles', {}).legend
+};
+
+let pendingTreasures = [];
+function earnTreasures(r) {
+  const have = Store.get('treasures', {});
+  const add = [];
+  TREASURES.forEach((t) => {
+    if (have[t.key] || t.later) return;
+    const rule = TREASURE_RULES[t.key];
+    if (rule && rule(r)) { have[t.key] = todayStr(); add.push(t); }
+  });
+  if (add.length) {
+    Store.set('treasures', have);
+    markFresh(add.map((t) => 't:' + t.key));
+    pendingTreasures = pendingTreasures.concat(add);
+  }
+  return add;
+}
+
+// ためて おいた 秘宝を ひとつずつ 画面の まんなかに 出す
+function flushTreasures() {
+  if (!pendingTreasures.length || document.getElementById('treasure-back')) return;
+  const t = pendingTreasures.shift();
+  showTreasure(t, true, flushTreasures);
+}
+
+function showTreasure(t, fresh, onClose) {
+  const have = Store.get('treasures', {});
+  const back = h('div', { id: 'treasure-back', class: 'dialog-back' }, [
+    h('div', { class: 'dialog-win treasure-win' + (fresh ? ' fresh' : ''), role: 'dialog', 'aria-modal': 'true' }, [
+      h('div', { class: 'tr-head', text: fresh ? 'ひほうを てに いれた！' : 'ひほう' }),
+      h('div', { class: 'tr-ico', 'data-icon': 't_' + t.key, 'aria-hidden': 'true' }),
+      h('div', { class: 'tr-name', text: t.name }),
+      h('p', { class: 'tr-lore', text: t.lore }),
+      h('div', { class: 'tr-how', text: 'てに いれた わけ：' + t.how + (have[t.key] ? '（' + have[t.key].replace(/-/g, '/') + '）' : '') }),
+      h('button', { class: 'btn primary', type: 'button', text: 'とじる', onclick: () => {
+        back.remove();
+        Sound.se('cursor');
+        if (onClose) onClose();
+      } })
+    ])
+  ]);
+  document.body.appendChild(back);
+  paintIcons(back);
+  if (fresh) Sound.se('fanfare');
 }
 
 // しょうごうの 条件（data.js の TITLES と key で つながる）
