@@ -1,7 +1,7 @@
 /* ============================================================
    たくわけの やかた — 見た目
-   ボードゲームライブラリーに あわせた ファミコンRPG風。
-   紺の 背景に、黒地・白わくの ウィンドウを かさねます。
+   ボードゲームライブラリー（BGL）と 同じ きまりで 作っています。
+   色・わく・ボタン・見出しの 値は BGL の CSS から そのまま。
 
    軽さの ための きまり：
    ・ずっと 動きつづける 演出は、濃さ（opacity）と 変形（transform）だけ
@@ -9,161 +9,243 @@
    ============================================================ */
 
 :root {
-  --bg: #141c3a;          /* ボードゲームライブラリーと 同じ 紺 */
-  --win: #000;
-  --line: #fff;
-  --text: #fff;
-  --muted: #a7b0d6;
-  --accent: #ffd84a;      /* カーソルと だいじな もじ */
-  --danger: #ff7b7b;
-  --radius: 8px;
-  --font: 'DotGothic16', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
+  /* よる（既定）— BGL と 同じ */
+  --bg: #141C3A;
+  --bg-2: #1C2650;
+  --panel: #0A0E24;
+  --frame: #FFFFFF;
+  --text: #FFFFFF;
+  --muted: #9DB2DE;
+  --accent: #F8D030;     /* ゴールド */
+  --accent-2: #5CD6FF;   /* みず */
+  --danger: #FF6B5E;
+  --shadow: 4px 4px 0 rgba(0,0,0,.55);
+  --scrim: rgba(10,14,36,.76);
+  --line: rgba(157,178,222,.35);  /* うすい 区切り線 */
+  --font: "DotGothic16", "HiraMaruProN-W4", "Hiragino Maru Gothic ProN", "MS Gothic", "Osaka-mono", monospace;
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
-
-html {
-  -webkit-text-size-adjust: 100%;
-  -webkit-tap-highlight-color: transparent;
-  background: var(--bg);
+/* ひる — BGL と 同じ */
+html[data-theme="day"] {
+  --bg: #E8E1CE; --bg-2: #FFFFFF; --panel: #FFFFFF; --frame: #12141E; --text: #12141E;
+  --muted: #3E4354; --accent: #0F3FA8; --accent-2: #8A2E12; --danger: #B0271A;
+  --shadow: 4px 4px 0 rgba(32,34,58,.30); --scrim: rgba(250,246,236,.86);
+  --line: rgba(62,67,84,.28);
 }
+
+* { box-sizing: border-box; }
+html { margin: 0; padding: 0; background: var(--bg); color-scheme: dark; -webkit-tap-highlight-color: transparent; }
+html[data-theme="day"] { color-scheme: light; }
 
 body {
-  background: var(--bg);
+  margin: 0;
+  background: transparent;
   color: var(--text);
   font-family: var(--font);
-  font-size: 17px;
-  line-height: 1.7;
-  min-height: 100vh;
-  min-height: 100dvh;
+  font-size: 16px;
+  line-height: 1.85;
+  letter-spacing: .02em;
+  -webkit-text-size-adjust: 100%;
+  -webkit-font-smoothing: none;
+  padding-top: calc(56px + 3px + env(safe-area-inset-top));
+  padding-bottom: calc(84px + env(safe-area-inset-bottom));
+  overflow-wrap: anywhere;
   -webkit-user-select: none;
   user-select: none;
 }
 
-.app {
-  max-width: 480px;
-  margin: 0 auto;
-  padding: 12px 16px calc(24px + env(safe-area-inset-bottom));
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+/* 走査線（BGL と 同じ）。独立した 層に して、下の 描き直しに 巻きこまれないように */
+body::after {
+  content: ""; position: fixed; inset: 0; z-index: 99; pointer-events: none;
+  background: repeating-linear-gradient(rgba(0,0,0,.16) 0 1px, transparent 1px 3px);
+  opacity: .5; transform: translateZ(0);
 }
+html[data-theme="day"] body::after { display: none; }
 
-/* ---- 上の 帯 ---- */
-.topbar { display: flex; align-items: center; justify-content: space-between; min-height: 40px; }
-.logo { font-size: 15px; color: var(--accent); letter-spacing: .12em; }
-.chip {
-  font-family: var(--font); font-size: 13px; color: var(--text);
-  background: var(--win); border: 2px solid var(--line); border-radius: 999px;
-  padding: 4px 12px; cursor: pointer;
+/* 酒場の ドット絵（BGL の 背景）と、その上の 幕 */
+#bg {
+  position: fixed; inset: 0; z-index: -2;
+  background: var(--bg) url("../assets/bg.png") center 42% / cover no-repeat;
+  image-rendering: -webkit-optimize-contrast; image-rendering: crisp-edges; image-rendering: pixelated;
+  transform: translateZ(0);
 }
-.chip.off { color: var(--muted); border-color: var(--muted); }
+#bg::after { content: ""; position: absolute; inset: 0; background: var(--scrim); }
 
-/* ---- ウィンドウ ---- */
-.win {
-  background: var(--win);
-  border: 3px solid var(--line);
-  border-radius: var(--radius);
-  padding: 14px 16px;
-  position: relative;
+h1, h2, h3 { font-weight: 400; margin: 0; letter-spacing: .04em; }
+p { margin: 0; }
+button, input { font: inherit; color: inherit; }
+button, a, input, .btn, .tab, .icon-btn, .msg { touch-action: manipulation; }
+input:focus-visible, button:focus-visible, a:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.wrap { max-width: 600px; margin: 0 auto; padding: 0 14px; }
+
+/* ---- 上の バー ---- */
+.topbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 50;
+  background: var(--panel); border-bottom: 3px solid var(--frame);
+  padding-top: env(safe-area-inset-top);
+  transform: translateZ(0); isolation: isolate;
 }
-.win-title {
-  position: absolute; top: -12px; left: 12px;
-  background: var(--win); padding: 0 8px;
-  font-size: 13px; color: var(--accent); line-height: 20px;
+.topbar::before { content: ""; position: absolute; left: 0; right: 0; bottom: 100%; height: 100vh; background: var(--panel); }
+.topbar-in { display: flex; align-items: center; gap: 7px; height: 56px; max-width: 600px; margin: 0 auto; padding: 0 12px; }
+.brand { display: flex; align-items: center; gap: 8px; text-decoration: none; font-size: 13px; letter-spacing: .08em; color: var(--accent); white-space: nowrap; margin-right: auto; }
+.brand .ico { width: 22px; height: 22px; display: block; }
+.icon-btn {
+  border: 2px solid var(--frame); background: var(--bg-2); color: var(--text);
+  padding: 5px 8px; font-size: 12.5px; letter-spacing: .08em; cursor: pointer;
+  min-width: 38px; min-height: 38px; position: relative; z-index: 1;
 }
+.icon-btn:active { transform: translate(1px, 1px); }
+.icon-btn.off { opacity: .4; text-decoration: line-through; color: var(--muted); }
+
+/* ---- 下の タブ ---- */
+.tabbar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+  background: var(--panel); border-top: 3px solid var(--frame);
+  padding-bottom: env(safe-area-inset-bottom);
+  transform: translateZ(0);
+}
+.tabbar-in { display: grid; grid-auto-columns: 1fr; grid-auto-flow: column; max-width: 600px; margin: 0 auto; }
+.tab {
+  border: 0; background: none; padding: 8px 0 10px; display: grid; gap: 1px; justify-items: center;
+  color: var(--muted); font-size: 11px; cursor: pointer; letter-spacing: .06em; text-decoration: none; position: relative;
+}
+.tab .i { width: 22px; height: 22px; display: block; }
+.tab[aria-current="true"] { color: var(--accent); }
+.tab .dot { position: absolute; top: 4px; right: calc(50% - 18px); width: 9px; height: 9px; background: var(--accent); border: 2px solid var(--panel); }
+
+/* ---- ページの 見出し ---- */
+.lede { font-size: 21px; line-height: 1.5; color: var(--accent); margin: 14px 0 10px; }
+.lede::before { content: "▶ "; font-size: 16px; }
+
+/* ---- ウィンドウ（ドラクエ風）---- */
+.win { background: var(--panel); border: 3px solid var(--frame); box-shadow: var(--shadow); padding: 14px 15px; position: relative; }
+.stack { display: flex; flex-direction: column; gap: 14px; }
+.win > h2 { font-size: 14px; color: var(--accent); margin: 0 0 10px; padding-bottom: 8px; border-bottom: 2px solid var(--frame); }
+.win > h2::before { content: "▼ "; }
+.sec { font-size: 15px; margin: 0 0 8px; color: var(--accent-2); }
+.sec::before { content: "■ "; font-size: 12px; }
+.muted { color: var(--muted); }
+.small { font-size: 13px; line-height: 1.7; }
 
 /* ---- ぬしの メッセージ ---- */
-.msg { display: flex; gap: 12px; min-height: 132px; padding-top: 18px; cursor: pointer; }
-.msg-icon { font-size: 34px; line-height: 1; flex: none; }
-/* 文字送りの 描き直しを 文字の 部分だけに 閉じこめる（見出しは はみ出すので 箱には かけない） */
-.msg-text { white-space: pre-wrap; flex: 1; contain: layout paint; }
-.msg-next {
-  position: absolute; right: 12px; bottom: 6px;
-  font-size: 12px; color: var(--accent);
-  opacity: 0;
-}
+.msg { display: flex; gap: 12px; align-items: flex-start; min-height: 116px; cursor: pointer; }
+.msg-icon { width: 34px; height: 34px; flex: none; color: var(--accent-2); margin-top: 3px; }
+.msg-body { flex: 1; min-width: 0; }
+.msg-name { font-size: 12px; color: var(--accent-2); letter-spacing: .1em; line-height: 1.4; margin-bottom: 2px; }
+/* 文字送りの 描き直しを 文字の 部分だけに 閉じこめる */
+.msg-text { white-space: pre-wrap; contain: layout paint; }
+.msg-next { position: absolute; right: 12px; bottom: 6px; font-size: 12px; color: var(--accent); opacity: 0; }
 .msg.done .msg-next { animation: blink 1s steps(1) infinite; }
 @keyframes blink { 50% { opacity: 1; } }
 
-/* ---- コマンド（えらぶ ところ）---- */
-.cmd { display: flex; flex-direction: column; padding: 8px 6px; }
-.opt {
-  display: flex; align-items: center; gap: 10px;
-  width: 100%; min-height: 52px;
-  padding: 10px 10px;
-  font-family: var(--font); font-size: 17px; line-height: 1.4; text-align: left;
-  color: var(--text); background: none; border: 0; border-radius: 6px;
-  cursor: pointer;
+/* ---- ボタン（BGL と 同じ）---- */
+.btn {
+  display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%;
+  padding: 13px 16px; border: 3px solid var(--frame); background: var(--panel); color: var(--text);
+  font-size: 16px; line-height: 1.5; letter-spacing: .06em; cursor: pointer; box-shadow: var(--shadow);
+  text-decoration: none; text-align: center;
 }
-.opt::before { content: '▶'; font-size: 13px; color: #3a4270; flex: none; width: 14px; }
-.opt:active, .opt:focus-visible { outline: none; background: #121a3a; }
-.opt:active::before, .opt:focus-visible::before { color: var(--accent); }
-.opt.sub { color: var(--muted); font-size: 15px; min-height: 44px; }
-.opt.accent { color: var(--accent); }
-.opt[disabled] { opacity: .4; }
+.btn:active { transform: translate(2px, 2px); box-shadow: none; }
+.btn.primary { color: var(--accent); border-color: var(--accent); }
+.btn.danger { color: var(--danger); border-color: var(--danger); box-shadow: none; }
+.btn.small { width: auto; padding: 8px 12px; font-size: 13px; box-shadow: none; border-width: 2px; }
+.btn.big { font-size: 18px; padding: 17px; }
+.btn.hero {
+  background: var(--accent); color: var(--panel); border-color: var(--accent);
+  font-size: 18px; padding: 16px; letter-spacing: .08em;
+  box-shadow: 0 0 0 3px var(--panel), 0 0 16px rgba(255,210,60,.45);
+}
+html[data-theme="day"] .btn.hero { box-shadow: 0 0 0 3px var(--panel), var(--shadow); }
+.btn.hero .arrow { animation: blinkOut 1s steps(1) infinite; }
+@keyframes blinkOut { 50% { opacity: 0; } }
+.btn-col { display: flex; flex-direction: column; gap: 10px; }
+.btn-row { display: flex; gap: 10px; }
+.btn-row .btn { flex: 1; }
+
+/* 選んだ ボタン（BGL の chip と 同じく 反転して ▶）*/
+.btn.picked { background: var(--text); color: var(--panel); border-color: var(--text); }
+.btn.picked::before { content: "▶"; }
 
 /* ---- 入力 ---- */
-.field { display: flex; gap: 8px; padding: 6px; }
-.input {
-  flex: 1; min-width: 0;
-  font-family: var(--font); font-size: 18px;      /* 16px 未満だと iPhone が 勝手に 拡大する */
-  color: var(--text); background: #0b1026;
-  border: 2px solid var(--muted); border-radius: 6px;
-  padding: 10px 12px;
+input[type=text], input[type=password], input[type=search] {
+  width: 100%; min-width: 0; padding: 10px 11px; border: 2px solid var(--frame); background: var(--bg-2);
+  color: var(--text); outline: none; border-radius: 0; -webkit-appearance: none; appearance: none;
+  font-size: 18px;   /* 16px 未満だと iPhone が 勝手に 拡大する */
   -webkit-user-select: text; user-select: text;
 }
-.input:focus { outline: none; border-color: var(--accent); }
-.btn {
-  font-family: var(--font); font-size: 17px; color: var(--win);
-  background: var(--accent); border: 0; border-radius: 6px;
-  padding: 10px 16px; cursor: pointer; flex: none;
-}
-.btn:active { transform: translateY(1px); }
+input::placeholder { color: var(--muted); opacity: .75; }
+.field { display: flex; gap: 10px; align-items: stretch; }
+.field .btn { width: auto; flex: none; }
 
 /* ---- すすみぐあい ---- */
-.progress { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--muted); padding: 0 4px; }
-.pips { display: flex; gap: 4px; }
-.pip { width: 10px; height: 10px; border: 2px solid var(--muted); border-radius: 2px; }
-.pip.on { background: var(--accent); border-color: var(--accent); }
+.progress { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+.bar { flex: 1; max-width: 55%; height: 10px; border: 2px solid var(--frame); background: var(--panel); position: relative; }
+.bar > i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); }
+
+/* ---- タグ ---- */
+.tag { display: inline-block; font-size: 11px; padding: 2px 7px; border: 1px solid var(--muted); color: var(--muted); line-height: 1.5; }
+.tag.hit { border-color: var(--accent); color: var(--accent); }
+.tag.mizu { border-color: var(--accent-2); color: var(--accent-2); }
+.tag.warn { border-color: var(--danger); color: var(--danger); }
 
 /* ---- 結果 ---- */
-.result-head { text-align: center; padding-top: 20px; }
-.result-label { font-size: 14px; color: var(--muted); }
-.result-name { font-size: 28px; line-height: 1.35; margin: 4px 0 6px; text-shadow: 0 0 10px currentColor; }
-.result-type { font-size: 14px; color: var(--muted); }
-.result-desc { font-size: 15px; line-height: 1.8; padding-top: 6px; -webkit-user-select: text; user-select: text; }
+.result-who { font-size: 13px; color: var(--muted); }
+.result-name { font-size: 26px; line-height: 1.4; margin: 2px 0 4px; }
+.result-name .sq { display: inline-block; width: .7em; height: .7em; margin-right: .3em; vertical-align: .05em; background: currentColor; }
+.result-type { font-size: 14px; color: var(--accent-2); margin-bottom: 8px; }
+.result-desc { font-size: 14.5px; line-height: 1.9; -webkit-user-select: text; user-select: text; }
 
-.stats { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; align-items: center; padding-top: 18px; font-size: 14px; }
-.stat-name { color: var(--text); }
-.stat-bar { display: flex; align-items: center; gap: 8px; }
-.blocks { display: flex; gap: 3px; flex: none; }
-.block { width: 14px; height: 12px; border: 2px solid #3a4270; border-radius: 2px; }
-.block.on { background: var(--accent); border-color: var(--accent); }
+.stats { display: grid; grid-template-columns: auto auto 1fr; gap: 6px 10px; align-items: center; font-size: 14px; }
+.blocks { display: flex; gap: 3px; }
+.block { width: 14px; height: 12px; border: 2px solid var(--muted); opacity: .6; }
+.block.on { background: var(--accent); border-color: var(--accent); opacity: 1; }
 .stat-word { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-.code-box { text-align: center; padding-top: 22px; }
-.code {
-  font-size: 44px; letter-spacing: .3em; text-indent: .3em; line-height: 1.2;
-  color: var(--accent);
-  -webkit-user-select: text; user-select: text;
-}
-.code-note { font-size: 13px; color: var(--muted); }
+.code { font-size: 44px; letter-spacing: .3em; text-indent: .3em; line-height: 1.25; color: var(--accent); text-align: center; -webkit-user-select: text; user-select: text; }
+.code-note { font-size: 13px; color: var(--muted); text-align: center; }
 
 /* ---- 発表された 席 ---- */
-.seat-group .win-title { font-size: 14px; }
-.seat-names { display: flex; flex-wrap: wrap; gap: 6px 14px; padding-top: 6px; font-size: 17px; }
+.seat-names { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 17px; }
 .seat-names .me { color: var(--accent); }
+.win > h2.colored::before { content: "■ "; }
 
-/* ---- 画面の 切りかえ（一度だけ、濃さと 位置で）---- */
-.screen-in { display: flex; flex-direction: column; gap: 22px; animation: screenIn .16s ease-out; }
-.progress + .win { margin-top: -6px; }
+/* ---- 呼びかけの カード（BGL の「なかまの なまえ」と 同じ）---- */
+.link-card {
+  display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center; width: 100%;
+  background: var(--panel); border: 3px solid var(--accent-2); box-shadow: var(--shadow);
+  padding: 12px 14px; text-align: left; cursor: pointer; color: var(--text); text-decoration: none;
+}
+.link-card:active { transform: translate(2px, 2px); box-shadow: none; }
+.link-card .i { width: 36px; height: 36px; color: var(--accent-2); }
+.link-card .t { font-size: 16px; line-height: 1.4; }
+.link-card .s { font-size: 12px; color: var(--muted); line-height: 1.5; }
+.link-card .go { color: var(--muted); font-size: 18px; }
+
+/* ---- お知らせ（BGL の toast と 同じ）---- */
+#toast {
+  position: fixed; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom)); transform: translateX(-50%);
+  background: var(--panel); color: var(--text); border: 3px solid var(--frame); box-shadow: var(--shadow);
+  padding: 10px 16px; font-size: 13px; z-index: 150; opacity: 0; pointer-events: none; transition: opacity .15s;
+  max-width: 88vw; text-align: center; white-space: nowrap;
+}
+#toast.show { opacity: 1; }
+
+/* ---- 画面の 切りかえ（一度だけ）---- */
+.screen-in { animation: screenIn .14s ease-out; }
 @keyframes screenIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
-/* ---- iPhone：タップへの 反応を 速くする ---- */
-button, a, input, .msg, .opt { touch-action: manipulation; }
-
 @media (prefers-reduced-motion: reduce) {
-  .screen-in, .msg.done .msg-next { animation: none; }
+  .screen-in, .msg.done .msg-next, .btn.hero .arrow { animation: none; }
   .msg.done .msg-next { opacity: 1; }
 }
+
+/* ---- 卓の 色（よる／ひるで 切りかわる）---- */
+.tc { color: var(--tc, var(--accent)); }
+html[data-theme="day"] .tc { color: var(--tc-day, var(--tc, var(--accent))); }
+.win > h2.tc { color: var(--tc, var(--accent)); }
+html[data-theme="day"] .win > h2.tc { color: var(--tc-day, var(--tc, var(--accent))); }
+
+/* 小さな「もどる」 */
+.back-row { display: flex; }
+.back-row .btn { color: var(--muted); border-color: var(--muted); }

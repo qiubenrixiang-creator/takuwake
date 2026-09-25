@@ -1,8 +1,9 @@
 // ============================================================
 //  app.js — 参加者の 画面
 //
-//  はじめる → なまえ → じゅんびの 2問 → 本編の 質問 → 結果（卓・つよさ・合言葉）
+//  しんだん → なまえ → じゅんびの 2問 → 本編の 質問 → 結果（卓・つよさ・合言葉）
 //  文字送りは 速く、途中でも 選択肢を おせます。待たせません。
+//  見た目は ボードゲームライブラリー（BGL）と 同じ 部品で 組んでいます。
 // ============================================================
 
 Sound.load({
@@ -18,28 +19,13 @@ const state = {
   name: Store.get('name', ''),
   exp: 1,
   leave: 0,
+  prePicked: {},      // じゅんびの 問いで えらんだ もの（もどった ときに 印を つける）
   preIndex: 0,
   answers: [],
   started: false
 };
 
 const $screen = document.getElementById('screen');
-const $sound = document.getElementById('btn-sound');
-
-// ---- 小さな 道具 ----------------------------------------
-function h(tag, attrs, children) {
-  const el = document.createElement(tag);
-  if (attrs) Object.keys(attrs).forEach((k) => {
-    const v = attrs[k];
-    if (k === 'class') el.className = v;
-    else if (k === 'text') el.textContent = v;
-    else if (k === 'style') el.style.cssText = v;
-    else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
-    else if (v !== false && v != null) el.setAttribute(k, v);
-  });
-  (children || []).forEach((c) => { if (c) el.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
-  return el;
-}
 
 // ---- 文字送り --------------------------------------------
 // 1秒に およそ 60文字。メッセージを たたくと 全文が 出ます。
@@ -77,104 +63,141 @@ function finishTyping() {
 }
 
 // ---- 画面を 組み立てる ------------------------------------
-// text     … ぬしの セリフ
-// choices  … [{ label, onPick, sub, accent }]
-// extra    … メッセージと 選択肢の あいだに 入れる ウィンドウ
-// input    … なまえ入力（{ value, onSubmit }）
+// tab      … したの タブの どれを 光らせるか（'ask' / 'seat'）
+// lede     … いちばん 上の 見出し
 // progress … { label, now, total }
+// text     … ぬしの セリフ
+// extra    … セリフの 下に ならべる ウィンドウ
+// after    … ボタンの 下に ならべる もの
+// input    … なまえ入力（{ value, onSubmit }）
+// choices  … [{ label, onPick, kind: 'hero' | 'primary', picked }]
+// back     … 小さな「もどる」ボタン（{ label, onPick }）
 function render(opts) {
   finishTyping();
+  setTab(opts.tab || 'ask');
   const wrap = h('div', { class: 'screen-in' });
 
+  if (opts.lede) wrap.appendChild(h('h1', { class: 'lede', text: opts.lede }));
+
   if (opts.progress) {
-    const pips = h('div', { class: 'pips' });
-    for (let i = 0; i < opts.progress.total; i++) pips.appendChild(h('span', { class: 'pip' + (i < opts.progress.now ? ' on' : '') }));
-    wrap.appendChild(h('div', { class: 'progress' }, [h('span', { text: opts.progress.label }), pips]));
+    const pct = Math.round(100 * opts.progress.now / opts.progress.total);
+    wrap.appendChild(h('div', { class: 'progress' }, [
+      h('span', { text: opts.progress.label }),
+      h('div', { class: 'bar', role: 'presentation' }, [h('i', { style: 'width:' + pct + '%' })])
+    ]));
   }
 
   const textEl = h('div', { class: 'msg-text' });
   const msg = h('section', { class: 'win msg', onclick: finishTyping }, [
-    h('span', { class: 'win-title', text: SITE.host }),
-    h('div', { class: 'msg-icon', text: SITE.hostIcon, 'aria-hidden': 'true' }),
-    textEl,
+    h('div', { class: 'msg-icon', 'data-icon': SITE.hostIcon, 'aria-hidden': 'true' }),
+    h('div', { class: 'msg-body' }, [h('div', { class: 'msg-name', text: SITE.host }), textEl]),
     h('span', { class: 'msg-next', text: '▼', 'aria-hidden': 'true' })
   ]);
-  wrap.appendChild(msg);
+  const stack = h('div', { class: 'stack' }, [msg]);
+  (opts.extra || []).forEach((el) => stack.appendChild(el));
 
-  (opts.extra || []).forEach((el) => wrap.appendChild(el));
-
-  const cmd = h('nav', { class: 'win cmd' });
   if (opts.input) {
     const input = h('input', {
-      class: 'input', type: 'text', value: opts.input.value || '', maxlength: '12',
-      placeholder: 'なまえ', autocomplete: 'off', enterkeyhint: 'done'
+      type: 'text', value: opts.input.value || '', maxlength: '12',
+      placeholder: 'なまえ', autocomplete: 'off', enterkeyhint: 'done', 'aria-label': 'なまえ'
     });
     const submit = () => { finishTyping(); opts.input.onSubmit(input.value); };
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
-    cmd.appendChild(h('div', { class: 'field' }, [input, h('button', { class: 'btn', type: 'button', text: 'けってい', onclick: submit })]));
+    stack.appendChild(h('section', { class: 'win' }, [
+      h('h2', { text: 'なまえ' }),
+      h('div', { class: 'field' }, [input, h('button', { class: 'btn primary', type: 'button', text: 'けってい', onclick: submit })])
+    ]));
     setTimeout(() => { try { input.focus({ preventScroll: true }); } catch (e) {} }, 50);
   }
-  (opts.choices || []).forEach((c) => {
-    cmd.appendChild(h('button', {
-      class: 'opt' + (c.sub ? ' sub' : '') + (c.accent ? ' accent' : ''),
-      type: 'button', text: c.label,
-      onclick: () => { finishTyping(); c.onPick(); }
-    }));
-  });
-  wrap.appendChild(cmd);
 
+  if (opts.choices && opts.choices.length) {
+    const col = h('div', { class: 'btn-col' });
+    opts.choices.forEach((c) => {
+      const cls = 'btn' + (c.kind ? ' ' + c.kind : '') + (c.picked ? ' picked' : '');
+      const kids = c.kind === 'hero' ? [h('span', { class: 'arrow', text: '▶', 'aria-hidden': 'true' }), c.label] : [c.label];
+      col.appendChild(h('button', { class: cls, type: 'button', onclick: () => { finishTyping(); c.onPick(); } }, kids));
+    });
+    stack.appendChild(col);
+  }
+
+  (opts.after || []).forEach((el) => stack.appendChild(el));
+
+  if (opts.back) {
+    stack.appendChild(h('div', { class: 'back-row' }, [
+      h('button', { class: 'btn small', type: 'button', text: '◀ ' + opts.back.label, onclick: () => { finishTyping(); opts.back.onPick(); } })
+    ]));
+  }
+
+  wrap.appendChild(stack);
   $screen.replaceChildren(wrap);
+  paintIcons(wrap);
   window.scrollTo(0, 0);
   typeInto(msg, textEl, opts.text || '');
 }
 
-// ---- おと ------------------------------------------------
-function paintSound() {
-  const on = Sound.isEnabled();
-  $sound.textContent = on ? 'おと ON' : 'おと OFF';
-  $sound.classList.toggle('off', !on);
+// BGL の「なかまの なまえ」と 同じ 形の カード
+function linkCard(icon, title, sub, onPick) {
+  return h('button', { class: 'link-card', type: 'button', onclick: () => { finishTyping(); onPick(); } }, [
+    h('span', { class: 'i', 'data-icon': icon, 'aria-hidden': 'true' }),
+    h('span', {}, [h('span', { class: 't', text: title, style: 'display:block' }), h('span', { class: 's', text: sub, style: 'display:block' })]),
+    h('span', { class: 'go', text: '▶', 'aria-hidden': 'true' })
+  ]);
 }
 
-$sound.addEventListener('click', () => {
-  const on = !Sound.isEnabled();
-  Sound.setEnabled(on);
-  if (on) { Sound.unlock(); if (state.started) Sound.bgm('main'); Sound.se('cursor'); }
-  paintSound();
-});
+// ---- したの タブ ------------------------------------------
+const $tabs = document.querySelectorAll('.tab[data-tab]');
+function setTab(name) {
+  $tabs.forEach((t) => t.setAttribute('aria-current', String(t.dataset.tab === name)));
+}
+$tabs.forEach((t) => t.addEventListener('click', () => {
+  Sound.se('cursor');
+  if (t.dataset.tab === 'seat') seatsScreen();
+  else titleScreen();
+}));
+const $library = document.getElementById('tab-library');
+if ($library && SITE.libraryUrl) $library.setAttribute('href', SITE.libraryUrl);
+
+// まだ 見ていない 席の はっぴょうが あれば、「せき」タブに 点を つける
+function paintSeatDot() {
+  const dot = document.getElementById('seat-dot');
+  const data = Store.get('seats', null);
+  if (dot) dot.hidden = !(data && data.at && Store.get('seatsSeen', 0) !== data.at);
+}
 
 // ---- 画面たち ----------------------------------------------
 function titleScreen() {
   const last = Store.get('last', null);
   const seats = Store.get('seats', null);
-  const choices = [
-    { label: 'はじめる', accent: true, onPick: () => start(true) },
-    { label: 'おとなしで はじめる', onPick: () => start(false) }
-  ];
-  if (last) choices.push({ label: 'まえの けっかを みる', sub: true, onPick: () => { begin(); resultScreen(last, false); } });
-  if (seats) choices.push({ label: 'きょうの せきを みる', sub: true, onPick: () => { begin(); seatsScreen(); } });
-  render({ text: LINES.welcome, choices });
+  const extra = [];
+  if (seats && seats.seats && seats.seats.length) {
+    extra.push(linkCard('seat', 'きょうの せき', 'かんじが はっぴょう した せきを みる', () => { Sound.se('decide'); seatsScreen(); }));
+  }
+  if (last && TABLES[last.table]) {
+    const t = TABLES[last.table];
+    extra.push(linkCard('star', 'まえの けっか', t.label + ' ' + t.name + '・あいことば ' + last.code, () => { Sound.se('decide'); resultScreen(last, false); }));
+  }
+  render({
+    lede: 'せきを きめる しんだん',
+    text: LINES.welcome,
+    after: extra,
+    choices: [{ label: 'しんだんを はじめる', kind: 'hero', onPick: () => { Sound.se('decide'); nameScreen(); } }]
+  });
 }
 
-// 最初の ひと押しで 音の 許可を とる（iPhone では この 瞬間 しか 取れない）
+// 最初の ひと押しで BGM を はじめる（iPhone では 押した 瞬間 しか 許可が 取れない）
 function begin() {
   if (state.started) return;
   state.started = true;
-  if (Sound.isEnabled()) { Sound.unlock(); Sound.bgm('main'); }
-}
-
-function start(withSound) {
-  Sound.setEnabled(withSound);
-  paintSound();
-  begin();
-  Sound.se('decide');
-  nameScreen();
+  Sound.unlock();
+  Sound.bgm('main');
 }
 
 function nameScreen() {
   render({
+    lede: 'なまえ',
     text: LINES.askName,
     input: { value: state.name, onSubmit: submitName },
-    choices: [{ label: 'もどる', sub: true, onPick: () => { Sound.se('cancel'); titleScreen(); } }]
+    back: { label: 'もどる', onPick: () => { Sound.se('cancel'); titleScreen(); } }
   });
 }
 
@@ -210,20 +233,24 @@ function preScreen() {
   const q = PRE_QUESTIONS[i];
   const intro = i === 0 ? LINES.preIntro.replace('{name}', state.name) + '\n' : '';
   render({
-    progress: { label: 'じゅんび ' + (i + 1) + ' / ' + PRE_QUESTIONS.length, now: i, total: PRE_QUESTIONS.length },
+    lede: 'じゅんび',
+    progress: { label: (i + 1) + ' / ' + PRE_QUESTIONS.length, now: i, total: PRE_QUESTIONS.length },
     text: intro + q.text,
     choices: q.options.map((o) => ({
       label: o.label,
+      picked: state.prePicked[q.key] && state[q.key] === o.value,
       onPick: () => {
         state[q.key] = o.value;
+        state.prePicked[q.key] = true;
         Sound.se('decide');
         if (i + 1 < PRE_QUESTIONS.length) { state.preIndex = i + 1; preScreen(); }
-        else { state.answers = []; questionScreen(0); }
+        else questionScreen(0);
       }
-    })).concat([{ label: 'ひとつ もどる', sub: true, onPick: () => {
+    })),
+    back: { label: 'ひとつ もどる', onPick: () => {
       Sound.se('cancel');
       if (i > 0) { state.preIndex = i - 1; preScreen(); } else nameScreen();
-    } }])
+    } }
   });
 }
 
@@ -231,26 +258,29 @@ function questionScreen(i) {
   const q = QUESTIONS[i];
   const intro = i === 0 ? LINES.qIntro + '\n\n' : '';
   render({
-    progress: { label: 'しつもん ' + (i + 1) + ' / ' + QUESTIONS.length, now: i, total: QUESTIONS.length },
+    lede: 'しつもん',
+    progress: { label: (i + 1) + ' / ' + QUESTIONS.length, now: i, total: QUESTIONS.length },
     text: intro + q.text,
     choices: q.options.map((o, ci) => ({
       label: o.label,
+      picked: state.answers[i] === ci,
       onPick: () => {
         state.answers[i] = ci;
-        state.answers.length = i + 1;
         Sound.se('decide');
         if (i + 1 < QUESTIONS.length) questionScreen(i + 1);
         else finish();
       }
-    })).concat([{ label: 'ひとつ もどる', sub: true, onPick: () => {
+    })),
+    back: { label: 'ひとつ もどる', onPick: () => {
       Sound.se('cancel');
       if (i > 0) questionScreen(i - 1);
       else { state.preIndex = PRE_QUESTIONS.length - 1; preScreen(); }
-    } }])
+    } }
   });
 }
 
 function finish() {
+  state.answers.length = QUESTIONS.length;
   const r = diagnose(state.answers);
   const res = {
     name: state.name,
@@ -262,6 +292,8 @@ function finish() {
     at: Date.now()
   };
   Store.set('last', res);
+  state.answers = [];
+  state.prePicked = {};
   Sound.se('fanfare');
   resultScreen(res, true);
 }
@@ -271,11 +303,10 @@ function statRows(stats) {
   STATS.forEach((s) => {
     const n = stats[s.key];
     const filled = Math.round(n);
-    const blocks = h('div', { class: 'blocks' });
+    const blocks = h('span', { class: 'blocks', 'aria-label': filled + ' / 4' });
     for (let i = 0; i < 4; i++) blocks.appendChild(h('span', { class: 'block' + (i < filled ? ' on' : '') }));
     const word = n >= 8 / 3 ? s.high : (n <= 4 / 3 ? s.low : 'ふつう');
-    rows.push(h('span', { class: 'stat-name', text: s.name }));
-    rows.push(h('div', { class: 'stat-bar' }, [blocks, h('span', { class: 'stat-word', text: word })]));
+    rows.push(h('span', { text: s.name }), blocks, h('span', { class: 'stat-word', text: word }));
   });
   return rows;
 }
@@ -283,45 +314,43 @@ function statRows(stats) {
 function resultScreen(res, fresh) {
   const t = TABLES[res.table];
   const head = h('section', { class: 'win' }, [
-    h('span', { class: 'win-title', text: 'しんだん けっか' }),
-    h('div', { class: 'result-head' }, [
-      h('div', { class: 'result-label', text: res.name + ' の たくは' }),
-      h('div', { class: 'result-name', text: t.label + ' ' + t.name, style: 'color:' + t.color }),
-      h('div', { class: 'result-type', text: t.type })
-    ]),
+    h('h2', { text: res.name + ' の たく' }),
+    h('div', { class: 'result-name tc', style: tableTone(res.table) }, [h('span', { class: 'sq', 'aria-hidden': 'true' }), t.label + ' ' + t.name]),
+    h('div', { class: 'result-type', text: t.type }),
     h('p', { class: 'result-desc', text: t.desc })
   ]);
   const stats = h('section', { class: 'win' }, [
-    h('span', { class: 'win-title', text: 'つよさ' }),
+    h('h2', { text: 'つよさ' }),
     h('div', { class: 'stats' }, statRows(res.stats))
   ]);
   const code = h('section', { class: 'win' }, [
-    h('span', { class: 'win-title', text: 'あいことば' }),
-    h('div', { class: 'code-box' }, [
-      h('div', { class: 'code', text: res.code }),
-      h('div', { class: 'code-note', text: 'かんじに この 4もじを みせる' })
-    ])
+    h('h2', { text: 'あいことば' }),
+    h('div', { class: 'code', text: res.code }),
+    h('div', { class: 'code-note', text: 'かんじに この 4もじを みせてね' })
   ]);
 
   const choices = [];
-  if (Store.get('seats', null)) choices.push({ label: 'きょうの せきを みる', accent: true, onPick: () => { Sound.se('decide'); seatsScreen(); } });
+  if (Store.get('seats', null)) choices.push({ label: 'きょうの せきを みる', kind: 'primary', onPick: () => { Sound.se('decide'); seatsScreen(); } });
   choices.push({ label: 'もういちど しんだん する', onPick: () => { Sound.se('decide'); nameScreen(); } });
-  choices.push({ label: 'はじめに もどる', sub: true, onPick: () => { Sound.se('cancel'); titleScreen(); } });
 
   render({
+    lede: 'しんだん けっか',
     text: fresh ? LINES.result : LINES.resume.replace('{name}', res.name),
-    extra: [head, stats, code],
-    choices
+    extra: [head, code, stats],
+    choices,
+    back: { label: 'はじめに もどる', onPick: () => { Sound.se('cancel'); titleScreen(); } }
   });
 }
 
 function seatsScreen() {
   const data = Store.get('seats', null);
-  const back = [{ label: 'もどる', sub: true, onPick: () => { Sound.se('cancel'); titleScreen(); } }];
   if (!data || !data.seats || !data.seats.length) {
-    render({ text: LINES.seatsNone, choices: back });
+    render({ tab: 'seat', lede: 'きょうの せき', text: LINES.seatsNone });
     return;
   }
+  Store.set('seatsSeen', data.at || 0);
+  paintSeatDot();
+
   const groups = [];
   const byLabel = {};
   data.seats.forEach((s) => {
@@ -329,16 +358,20 @@ function seatsScreen() {
     byLabel[s.g].names.push(s.n);
   });
   const me = state.name || Store.get('name', '');
-  const extra = groups.map((g) => {
-    const color = TABLES[g.key] ? TABLES[g.key].color : 'var(--accent)';
-    const title = h('span', { class: 'win-title', text: g.label });
-    title.style.color = color;
-    return h('section', { class: 'win seat-group', style: 'border-color:' + color }, [
-      title,
-      h('div', { class: 'seat-names' }, g.names.map((n) => h('span', { class: n === me ? 'me' : '', text: n === me ? n + '（おぬし）' : n })))
-    ]);
+  const mine = groups.find((g) => g.names.indexOf(me) >= 0);
+  // じぶんの 卓を いちばん 上に
+  if (mine) { groups.splice(groups.indexOf(mine), 1); groups.unshift(mine); }
+
+  const extra = groups.map((g) => h('section', { class: 'win' }, [
+    h('h2', { class: 'colored tc', style: tableTone(g.key), text: g.label + (g === mine ? '　← おぬし' : '') }),
+    h('div', { class: 'seat-names' }, g.names.map((n) => h('span', { class: n === me ? 'me' : '', text: n === me ? n + '（おぬし）' : n })))
+  ]));
+  render({
+    tab: 'seat',
+    lede: 'きょうの せき',
+    text: mine ? LINES.seatsMine.replace('{name}', me).replace('{table}', mine.label) : LINES.seatsIn,
+    extra
   });
-  render({ text: LINES.seatsIn, extra, choices: back });
 }
 
 // ---- はじまり ----------------------------------------------
@@ -353,15 +386,17 @@ function importPublished() {
   return true;
 }
 
-paintSound();
+paintIcons(document);
+bindTopbar(() => { state.started = true; Sound.bgm('main'); });
 if (importPublished()) seatsScreen();
 else titleScreen();
+paintSeatDot();
 
 // すでに 開いている ページで リンクを ひらくと、# から後ろだけが 変わって
 // 読みこみ直しに ならないことが ある。その 変化も ひろう。
 window.addEventListener('hashchange', () => { if (importPublished()) seatsScreen(); });
 
-// 最初に 画面の どこかを おした 瞬間に 音の 許可を とる。
+// 最初に 画面の どこかを おした 瞬間に 音の 許可を とり、BGM を はじめる。
 // タッチの 場合、指を 置いた 瞬間（pointerdown）では 許可が 取れないので click で。
 // capture で ボタンの 処理より 先に 走らせる。
-document.addEventListener('click', () => { if (Sound.isEnabled()) Sound.unlock(); }, { capture: true, once: true });
+document.addEventListener('click', begin, { capture: true, once: true });

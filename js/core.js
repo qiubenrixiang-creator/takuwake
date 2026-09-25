@@ -30,6 +30,55 @@ function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
+// ---- 画面の 部品を つくる 小さな 道具 ---------------------------
+// h('button', { class: 'btn', text: 'おす', onclick: fn }, [子ども])
+function h(tag, attrs, children) {
+  const el = document.createElement(tag);
+  if (attrs) Object.keys(attrs).forEach((k) => {
+    const v = attrs[k];
+    if (k === 'class') el.className = v;
+    else if (k === 'text') el.textContent = v;
+    else if (k === 'style') el.style.cssText = v;
+    else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
+    else if (v !== false && v != null) el.setAttribute(k, v);
+  });
+  (children || []).forEach((c) => { if (c) el.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
+  return el;
+}
+
+// 卓の 色。よる／ひるで 見やすい 色が ちがうので、両方を わたしておき
+// CSS（.tc）の がわで えらびます。切りかえても すぐ 色が かわります。
+function tableTone(key) {
+  const t = TABLES[key];
+  return t ? '--tc:' + t.color + ';--tc-day:' + (t.day || t.color) : '';
+}
+
+// ---- BGLと 共有する 設定 ------------------------------------
+// ボードゲームライブラリー（BGL）と 同じ github.io に 置くと、
+// 「よる／ひる」「BGM」「効果音」の 設定を BGL と 共有します。
+// どちらで 切りかえても、もう一方にも 反映されます。
+const Shared = {
+  keys: { theme: 'bgl.theme2', bgm: 'bgl.bgmEnabled', se: 'bgl.seEnabled' },
+  read(name, fallback) {
+    try { const v = localStorage.getItem(this.keys[name]); return v === null ? fallback : JSON.parse(v); } catch (e) { return fallback; }
+  },
+  write(name, value) {
+    try { localStorage.setItem(this.keys[name], JSON.stringify(value)); } catch (e) {}
+  }
+};
+
+const Theme = {
+  get() { return Shared.read('theme', 'night') === 'day' ? 'day' : 'night'; },
+  apply(t) {
+    if (t === 'day') document.documentElement.setAttribute('data-theme', 'day');
+    else document.documentElement.removeAttribute('data-theme');
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', t === 'day' ? '#FFFFFF' : '#0A0E24');
+  },
+  toggle() { const t = this.get() === 'day' ? 'night' : 'day'; Shared.write('theme', t); this.apply(t); return t; }
+};
+Theme.apply(Theme.get());
+
 // ---- 音 --------------------------------------------------
 // play() は「鳴らす じゅんびを せよ」という 要求で、音が 出るまで 時間差が あります。
 // その間に 止めても あとから 鳴りだすので、札を つけて 確実に 止めます。
@@ -37,7 +86,8 @@ const Sound = (function () {
   const nativePlay = HTMLMediaElement.prototype.play;
   const nativePause = HTMLMediaElement.prototype.pause;
   const bank = {};
-  let enabled = Store.get('sound', true);
+  let bgmOn = Shared.read('bgm', true) !== false;
+  let seOn = Shared.read('se', true) !== false;
   let ready = null;          // 許可を とり終えたら 解決する
   let currentBgm = null;
 
@@ -62,7 +112,7 @@ const Sound = (function () {
   }
 
   // iPhone は「一度も 鳴らしたことの ない 音」を あとから 鳴らせません。
-  // ボタンを おした（click の）瞬間に、すべての 音に 無音で 許可を とります。
+  // 画面を おした（click の）瞬間に、すべての 音に 無音で 許可を とります。
   // 許可を とり終えるまでは、鳴らす指示を 順番に 待たせます（途中で 鳴らすと 止められるため）。
   function unlock() {
     if (ready) return ready;
@@ -80,7 +130,7 @@ const Sound = (function () {
   function whenReady(fn) { if (ready) ready.then(fn); }
 
   function se(name) {
-    if (!enabled || !bank[name]) return;
+    if (!seOn || !bank[name]) return;
     whenReady(() => { const a = bank[name]; a.currentTime = 0; a._play(); });
   }
 
@@ -93,19 +143,94 @@ const Sound = (function () {
   function bgm(name) {
     if (currentBgm && currentBgm !== name && bank[currentBgm]) bank[currentBgm]._stop();
     currentBgm = name;
-    if (!enabled || !bank[name]) return;
-    whenReady(() => { if (enabled && currentBgm === name) bank[name]._play(); });
+    if (!bgmOn || !bank[name]) return;
+    whenReady(() => { if (bgmOn && currentBgm === name) bank[name]._play(); });
   }
 
-  function setEnabled(on) {
-    enabled = !!on;
-    Store.set('sound', enabled);
-    if (!enabled) Object.values(bank).forEach((a) => a._stop());
-    else if (currentBgm) whenReady(() => { if (enabled) bank[currentBgm]._play(); });
+  function setBgm(on) {
+    bgmOn = !!on;
+    Shared.write('bgm', bgmOn);
+    if (!currentBgm || !bank[currentBgm]) return;
+    if (bgmOn) { unlock(); whenReady(() => { if (bgmOn) bank[currentBgm]._play(); }); }
+    else bank[currentBgm]._stop();
   }
 
-  return { load, unlock, se, stop, bgm, setEnabled, isEnabled: () => enabled };
+  function setSe(on) {
+    seOn = !!on;
+    Shared.write('se', seOn);
+    if (seOn) unlock();
+  }
+
+  return { load, unlock, se, stop, bgm, setBgm, setSe, isBgm: () => bgmOn, isSe: () => seOn };
 })();
+
+// ---- ドット絵の アイコン（BGLと 同じ 描きかた）------------------
+// '#' の ところだけ 塗った 小さな 四角を ならべて SVG に します。
+const ICONS = {
+  yakata: ['...##...', '..####..', '.######.', '########', '.##..##.', '.##..##.', '.######.', '.##..##.'],
+  nushi:  ['..####..', '.#....#.', '#..#...#', '#.#....#', '#......#', '.#....#.', '..####..', '.######.'],
+  ask:    ['..####..', '.##..##.', '.....##.', '....##..', '...##...', '...##...', '........', '...##...'],
+  seat:   ['........', '.######.', '.######.', '..#..#..', '#.#..#.#', '###..###', '#.#..#.#', '........'],
+  chest:  ['..####..', '.######.', '.#.##.#.', '########', '#..##..#', '#..##..#', '########', '........'],
+  key:    ['.###....', '#...#...', '#...####', '#...#.#.', '.###....', '........', '........', '........'],
+  door:   ['.######.', '.#....#.', '.#....#.', '.#....#.', '.#...##.', '.#....#.', '.#....#.', '.######.'],
+  star:   ['...##...', '...##...', '########', '.######.', '..####..', '.##..##.', '##....##', '........']
+};
+
+function pix(name) {
+  const map = ICONS[name];
+  if (!map) return '';
+  const w = Math.max.apply(null, map.map((r) => r.length));
+  let rects = '';
+  map.forEach((row, y) => { for (let x = 0; x < row.length; x++) if (row[x] === '#') rects += '<rect x="' + x + '" y="' + y + '" width="1" height="1"/>'; });
+  return '<svg viewBox="0 0 ' + w + ' ' + map.length + '" width="100%" height="100%" fill="currentColor" shape-rendering="crispEdges" aria-hidden="true">' + rects + '</svg>';
+}
+
+function paintIcons(root) {
+  (root || document).querySelectorAll('[data-icon]').forEach((el) => {
+    if (!el.dataset.painted) { el.innerHTML = pix(el.dataset.icon); el.dataset.painted = '1'; }
+  });
+}
+
+// ---- 下に 出る 小さな お知らせ（BGLの toast と 同じ）----------------
+function toast(text) {
+  let el = document.getElementById('toast');
+  if (!el) { el = document.createElement('div'); el.id = 'toast'; document.body.appendChild(el); }
+  el.textContent = text;
+  el.classList.add('show');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), 1800);
+}
+
+// ---- 上の バー（♪・SE・よる）を つなぐ ---------------------------
+function bindTopbar(onBgmOn) {
+  const $bgm = document.getElementById('btn-bgm');
+  const $se = document.getElementById('btn-se');
+  const $theme = document.getElementById('btn-theme');
+  const paint = () => {
+    if ($bgm) { $bgm.classList.toggle('off', !Sound.isBgm()); $bgm.setAttribute('aria-pressed', String(Sound.isBgm())); }
+    if ($se) { $se.classList.toggle('off', !Sound.isSe()); $se.setAttribute('aria-pressed', String(Sound.isSe())); }
+    if ($theme) $theme.textContent = Theme.get() === 'day' ? 'ひる' : 'よる';
+  };
+  if ($bgm) $bgm.addEventListener('click', () => {
+    Sound.setBgm(!Sound.isBgm());
+    if (Sound.isBgm() && onBgmOn) onBgmOn();
+    toast(Sound.isBgm() ? 'BGMを ならします' : 'BGMを とめました');
+    paint();
+  });
+  if ($se) $se.addEventListener('click', () => {
+    Sound.setSe(!Sound.isSe());
+    Sound.se('cursor');
+    toast(Sound.isSe() ? 'こうかおんを ならします' : 'こうかおんを とめました');
+    paint();
+  });
+  if ($theme) $theme.addEventListener('click', () => {
+    Theme.toggle();
+    Sound.se('cursor');
+    paint();
+  });
+  paint();
+}
 
 // ---- 診断の 計算 ----------------------------------------
 // こたえごとの 点数を 足し、7つの つよさを 0〜4 に ならして、

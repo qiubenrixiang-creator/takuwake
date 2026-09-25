@@ -27,24 +27,24 @@ function save() {
 }
 
 const $screen = document.getElementById('screen');
-const $sound = document.getElementById('btn-sound');
-
-function h(tag, attrs, children) {
-  const el = document.createElement(tag);
-  if (attrs) Object.keys(attrs).forEach((k) => {
-    const v = attrs[k];
-    if (k === 'class') el.className = v;
-    else if (k === 'text') el.textContent = v;
-    else if (k === 'style') el.style.cssText = v;
-    else if (k.startsWith('on')) el.addEventListener(k.slice(2), v);
-    else if (v !== false && v != null) el.setAttribute(k, v);
-  });
-  (children || []).forEach((c) => { if (c) el.appendChild(typeof c === 'string' ? document.createTextNode(c) : c); });
-  return el;
+// ウィンドウ（BGL と 同じ ▼見出し つき）
+function win(title, children, extraClass) {
+  return h('section', { class: 'win' + (extraClass ? ' ' + extraClass : '') }, [h('h2', { text: title })].concat(children));
 }
 
-function win(title, children, extraClass) {
-  return h('section', { class: 'win' + (extraClass ? ' ' + extraClass : '') }, [h('span', { class: 'win-title', text: title })].concat(children));
+// ぬしの ウィンドウ
+function nushi(textEl, name, icon) {
+  return h('section', { class: 'win msg done' }, [
+    h('div', { class: 'msg-icon', 'data-icon': icon || SITE.hostIcon, 'aria-hidden': 'true' }),
+    h('div', { class: 'msg-body' }, [h('div', { class: 'msg-name', text: name || SITE.host }), textEl])
+  ]);
+}
+
+function show(children) {
+  const wrap = h('div', { class: 'screen-in' }, children);
+  $screen.replaceChildren(wrap);
+  paintIcons(wrap);
+  window.scrollTo(0, 0);
 }
 
 // ---- ぬしの ひとこと ----------------------------------------
@@ -52,20 +52,8 @@ let $say = null;
 function say(text) { if ($say) $say.textContent = text; }
 
 // ---- おと ------------------------------------------------
-function paintSound() {
-  const on = Sound.isEnabled();
-  $sound.textContent = on ? 'おと ON' : 'おと OFF';
-  $sound.classList.toggle('off', !on);
-}
-$sound.addEventListener('click', () => {
-  const on = !Sound.isEnabled();
-  Sound.setEnabled(on);
-  if (on) { Sound.unlock(); Sound.bgm('kumi'); Sound.se('cursor'); }
-  paintSound();
-});
-document.addEventListener('click', () => {
-  if (Sound.isEnabled()) { Sound.unlock(); Sound.bgm('kumi'); }
-}, { capture: true, once: true });
+// 最初に 画面を おした 瞬間に 許可を とって、たくぐみの ま の BGM を ながす
+document.addEventListener('click', () => { Sound.unlock(); Sound.bgm('kumi'); }, { capture: true, once: true });
 
 // ---- 扉の 錠 ------------------------------------------------
 function isUnlocked() {
@@ -73,7 +61,7 @@ function isUnlocked() {
 }
 
 function lockScreen() {
-  const input = h('input', { class: 'input', type: 'password', placeholder: 'あいことば', autocomplete: 'off', enterkeyhint: 'done' });
+  const input = h('input', { type: 'password', placeholder: 'あいことば', autocomplete: 'off', enterkeyhint: 'done', 'aria-label': 'あいことば' });
   const msg = h('div', { class: 'msg-text', text: 'この とびらには かぎが かかって おる。\nかんじの あいことばを つげるのじゃ。' });
   const open = () => {
     if (input.value.trim() !== ADMIN_WORDS.kumi) { Sound.se('cancel'); input.value = ''; msg.textContent = 'ちがう ようじゃ。'; return; }
@@ -82,23 +70,24 @@ function lockScreen() {
     mainScreen();
   };
   input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); open(); } });
-  $screen.replaceChildren(h('div', { class: 'screen-in' }, [
-    h('section', { class: 'win msg' }, [h('span', { class: 'win-title', text: 'とざされた とびら' }), h('div', { class: 'msg-icon', text: '🚪' }), msg]),
-    h('nav', { class: 'win cmd' }, [
-      h('div', { class: 'field' }, [input, h('button', { class: 'btn', type: 'button', text: 'ひらく', onclick: open })]),
-      h('a', { class: 'opt sub', href: 'index.html', text: 'やかたへ もどる' })
+  show([
+    h('h1', { class: 'lede', text: 'とざされた とびら' }),
+    h('div', { class: 'stack' }, [
+      nushi(msg, 'とびら', 'door'),
+      win('あいことば', [h('div', { class: 'field' }, [input, h('button', { class: 'btn primary', type: 'button', text: 'ひらく', onclick: open })])]),
+      h('div', { class: 'back-row' }, [h('a', { class: 'btn small', href: 'index.html', text: '◀ やかたへ もどる' })])
     ])
-  ]));
+  ]);
 }
 
 // ---- 本体 ------------------------------------------------
-let $roster, $plan, $groups, $publish, $addMsg, $name, $code;
+let $roster, $rosterTitle, $plan, $groups, $publish, $addMsg, $name, $code;
 
 function mainScreen() {
   $say = h('div', { class: 'msg-text', text: 'しんだんを おえた ものは、4もじの あいことばを もっておる。\nなまえと いっしょに うちこむのじゃ。' });
 
-  $name = h('input', { class: 'input', type: 'text', placeholder: 'なまえ', maxlength: '12', autocomplete: 'off', enterkeyhint: 'next' });
-  $code = h('input', { class: 'input code-input', type: 'text', placeholder: '4もじ', maxlength: '5', autocomplete: 'off', autocapitalize: 'characters', enterkeyhint: 'done' });
+  $name = h('input', { type: 'text', placeholder: 'なまえ', maxlength: '12', autocomplete: 'off', enterkeyhint: 'next' });
+  $code = h('input', { class: 'code-input', type: 'text', placeholder: '4もじ', maxlength: '5', autocomplete: 'off', autocapitalize: 'characters', enterkeyhint: 'done' });
   $name.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $code.focus(); } });
   $code.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addPerson(); } });
   $addMsg = h('div', { class: 'note' });
@@ -106,20 +95,24 @@ function mainScreen() {
   $roster = h('div', { class: 'roster' });
   $plan = h('div');
   $groups = h('div', { class: 'groups' });
-  $publish = h('div');
+  $publish = h('div', { class: 'stack' });
+  $rosterTitle = h('h2', { text: 'めいぼ' });
 
-  $screen.replaceChildren(h('div', { class: 'screen-in' }, [
-    h('section', { class: 'win msg' }, [h('span', { class: 'win-title', text: SITE.host }), h('div', { class: 'msg-icon', text: SITE.hostIcon }), $say]),
-    win('むかえる', [
-      h('div', { class: 'field add-field' }, [$name, $code]),
-      h('div', { class: 'field' }, [h('button', { class: 'btn wide', type: 'button', text: 'むかえる', onclick: addPerson })]),
-      $addMsg
-    ], 'no-print'),
-    win('めいぼ', [$roster], 'no-print'),
-    win('たくの せってい', [$plan], 'no-print'),
-    $groups,
-    $publish
-  ]));
+  show([
+    h('h1', { class: 'lede', text: 'たくぐみの ま' }),
+    h('div', { class: 'stack' }, [
+      h('div', { class: 'no-print' }, [nushi($say)]),
+      win('むかえる', [
+        h('div', { class: 'field add-field' }, [$name, $code]),
+        h('div', { class: 'btn-col tight' }, [h('button', { class: 'btn primary', type: 'button', text: 'むかえる', onclick: addPerson })]),
+        $addMsg
+      ], 'no-print'),
+      h('section', { class: 'win no-print' }, [$rosterTitle, $roster]),
+      win('たくの せってい', [$plan], 'no-print'),
+      $groups,
+      $publish
+    ])
+  ]);
   renderAll();
 }
 
@@ -215,27 +208,28 @@ function tapSeat(gi, id) {
 }
 
 // ---- 表示 --------------------------------------------------
-function badge(text, cls) { return h('span', { class: 'badge' + (cls ? ' ' + cls : ''), text }); }
+function badge(text, cls) { return h('span', { class: 'tag' + (cls ? ' ' + cls : ''), text }); }
 
 function typeChip(key) {
   const t = TABLES[key];
-  return h('span', { class: 'type-chip', text: t ? t.label : '?', style: t ? 'color:' + t.color + ';border-color:' + t.color : '' });
+  return h('span', { class: 'type-chip tc', text: t ? t.label : '?', style: tableTone(key) });
 }
 
 function renderRoster() {
   $roster.replaceChildren();
+  $rosterTitle.textContent = 'めいぼ（' + K.roster.length + 'にん）';
   if (!K.roster.length) { $roster.appendChild(h('div', { class: 'note', text: 'まだ だれも むかえて おらぬ。' })); return; }
   K.roster.forEach((p) => {
     const marks = [];
     if (p.exp === 0) marks.push(badge('はじめて'));
-    if (p.exp === 2) marks.push(badge('せつめい できる', 'good'));
+    if (p.exp === 2) marks.push(badge('せつめい できる', 'mizu'));
     if (p.leave === 1) marks.push(badge('とちゅうで かえる', 'warn'));
-    if (Number.isInteger(p.locked)) marks.push(badge('こてい', 'lock'));
+    if (Number.isInteger(p.locked)) marks.push(badge('こてい', 'hit'));
     $roster.appendChild(h('div', { class: 'roster-row' }, [
       typeChip(p.table),
       h('div', { class: 'who' }, [h('div', { class: 'who-name', text: p.name }), h('div', { class: 'marks' }, marks)]),
       h('button', { class: 'mini', type: 'button', text: Number.isInteger(p.locked) ? 'はずす' : 'こてい', onclick: () => toggleLock(p.id), disabled: !K.groups && !Number.isInteger(p.locked) }),
-      h('button', { class: 'mini', type: 'button', text: '×', 'aria-label': p.name + 'を はずす', onclick: () => removePerson(p.id) })
+      h('button', { class: 'mini warn', type: 'button', text: '×', 'aria-label': p.name + 'を はずす', onclick: () => removePerson(p.id) })
     ]));
   });
 }
@@ -253,7 +247,7 @@ function renderPlan() {
       h('span', { text: 'にん' })
     ]),
     h('div', { class: 'note', text: summary }),
-    h('div', { class: 'field' }, [h('button', { class: 'btn wide', type: 'button', text: 'たくを くむ', onclick: runAssign })])
+    h('div', { class: 'btn-col tight' }, [h('button', { class: 'btn primary', type: 'button', text: 'たくを くむ', onclick: runAssign })])
   );
 }
 
@@ -277,24 +271,24 @@ function renderGroups() {
         h('span', { class: 'seat-sub', text: [m.exp === 2 ? 'せつめい' : (m.exp === 0 ? 'はじめて' : ''), m.leave ? 'とちゅう' : ''].filter(Boolean).join('・') })]));
     for (let k = members.length; k < caps[gi]; k++) seats.push(h('button', { class: 'seat empty', type: 'button', text: 'あいた せき', onclick: () => tapSeat(gi, null) }));
 
-    const title = h('span', { class: 'win-title', text: t.label + ' ' + t.name + '　' + members.length + '/' + caps[gi] });
-    title.style.color = t.color;
-    const box = h('section', { class: 'win group', style: 'border-color:' + t.color }, [title, h('div', { class: 'seats' }, seats),
+    const title = h('h2', { class: 'colored tc', style: tableTone(key) }, [t.label + ' ' + t.name, h('span', { class: 'count', text: members.length + '/' + caps[gi] + 'にん' })]);
+    const box = h('section', { class: 'win group' }, [title, h('div', { class: 'seats' }, seats),
       h('div', { class: 'mood', text: groupMood(members) })]
       .concat(groupWarnings(members).map((w) => h('div', { class: 'warn-line', text: '※ ' + w }))));
     $groups.appendChild(box);
   });
 
   $publish.appendChild(win('はっぴょう', [
-    h('div', { class: 'note', text: 'リンクを LINEなどに はる。ひらいた ものの スマホに せきが のこり、いつでも みられる。' }),
-    h('nav', { class: 'cmd' }, [
-      h('button', { class: 'opt accent', type: 'button', text: 'はっぴょう リンクを コピー', onclick: copyPublish }),
-      h('button', { class: 'opt', type: 'button', text: 'もじで コピー', onclick: copyText }),
-      h('button', { class: 'opt', type: 'button', text: 'たくに おく ふだを いんさつ', onclick: () => { Sound.se('decide'); window.print(); } }),
-      h('button', { class: 'opt sub', type: 'button', text: 'めいぼを しろしに もどす', onclick: clearAll }),
-      h('a', { class: 'opt sub', href: 'index.html', text: 'やかたへ もどる' })
+    h('p', { class: 'small muted', text: 'リンクを LINEなどに はる。ひらいた ひとの スマホに せきが のこり、いつでも みられる。' }),
+    h('div', { class: 'btn-col tight' }, [
+      h('button', { class: 'btn hero', type: 'button', onclick: copyPublish }, [h('span', { class: 'arrow', text: '▶', 'aria-hidden': 'true' }), 'はっぴょう リンクを コピー']),
+      h('button', { class: 'btn', type: 'button', text: 'もじで コピー', onclick: copyText }),
+      h('button', { class: 'btn', type: 'button', text: 'たくに おく ふだを いんさつ', onclick: () => { Sound.se('decide'); window.print(); } })
     ])
   ], 'no-print'));
+  $publish.appendChild(h('div', { class: 'back-row no-print' }, [
+    h('button', { class: 'btn danger small', type: 'button', text: 'めいぼを しろしに もどす', onclick: clearAll })
+  ]));
 }
 
 function renderAll() { renderRoster(); renderPlan(); renderGroups(); }
@@ -320,7 +314,7 @@ function copyPublish() {
   const base = location.href.replace(/kumi\.html.*$/, 'index.html').replace(/#.*$/, '');
   const url = base + '#r=' + encodePublish(publishSeats());
   Sound.se('decide');
-  copy(url, () => say('はっぴょう リンクを コピーしたぞい。\nみなに わたすのじゃ。'));
+  copy(url, () => { toast('リンクを コピーしました'); say('はっぴょう リンクを コピーしたぞい。\nみなに わたすのじゃ。'); });
 }
 
 function copyText() {
@@ -329,7 +323,7 @@ function copyText() {
   publishSeats().forEach((s) => { (byGroup[s.g] = byGroup[s.g] || []).push(s.n); });
   Object.keys(byGroup).forEach((g) => { lines.push(g + '： ' + byGroup[g].join('、')); });
   Sound.se('decide');
-  copy(lines.join('\n'), () => say('もじで コピーしたぞい。'));
+  copy(lines.join('\n'), () => { toast('もじで コピーしました'); say('もじで コピーしたぞい。'); });
 }
 
 function clearAll() {
@@ -342,5 +336,8 @@ function clearAll() {
 }
 
 // ---- はじまり ----------------------------------------------
-paintSound();
+paintIcons(document);
+bindTopbar(() => Sound.bgm('kumi'));
+const $library = document.getElementById('tab-library');
+if ($library && SITE.libraryUrl) $library.setAttribute('href', SITE.libraryUrl);
 if (isUnlocked()) mainScreen(); else lockScreen();

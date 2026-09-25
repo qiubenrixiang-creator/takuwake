@@ -1,63 +1,71 @@
 /* ============================================================
    たくぐみの ま（幹事用）だけの 見た目
+   色は style.css の 変数（BGL と 同じ）だけを つかいます。
    ============================================================ */
 
-.note { font-size: 13px; color: var(--muted); padding: 6px 6px 0; line-height: 1.6; }
+.note { font-size: 13px; color: var(--muted); line-height: 1.7; margin-top: 8px; }
 .note.warn { color: var(--danger); }
-.note.center { text-align: center; padding: 0; }
+.note.center { text-align: center; margin: 0; }
 
-.add-field .input { flex: 1 1 0; }
-.code-input { text-transform: uppercase; letter-spacing: .25em; text-align: center; flex: 0 0 120px !important; }
-.btn.wide { flex: 1; }
+.add-field input { flex: 1 1 0; }
+.code-input { text-transform: uppercase; letter-spacing: .25em; text-align: center; flex: 0 0 116px !important; }
+.btn-col.tight { margin-top: 10px; }
+
+/* 小さな ボタン（BGL の .mini と 同じ）*/
+.mini {
+  flex: none; min-width: 40px; min-height: 36px;
+  border: 2px solid var(--frame); background: var(--panel); color: var(--text);
+  padding: 5px 9px; font-size: 12px; cursor: pointer;
+}
+.mini:active { transform: translate(1px, 1px); }
+.mini.warn { color: var(--danger); border-color: var(--danger); }
+.mini[disabled] { opacity: .35; cursor: default; }
 
 /* めいぼ */
-.roster { display: flex; flex-direction: column; gap: 6px; padding-top: 10px; max-height: 360px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
-.roster-row { display: flex; align-items: center; gap: 8px; padding: 6px 4px; border-bottom: 1px solid #1d2550; }
+.roster { display: flex; flex-direction: column; max-height: 360px; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.roster-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 2px solid var(--line); }
+.roster-row:last-child { border-bottom: 0; }
 .who { flex: 1; min-width: 0; }
-.who-name { font-size: 16px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.who-name { font-size: 16px; line-height: 1.35; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .marks { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
-.badge { font-size: 11px; color: var(--muted); border: 1px solid #3a4270; border-radius: 4px; padding: 0 5px; line-height: 18px; }
-.badge.good { color: #7fe0a0; border-color: #2f6e48; }
-.badge.warn { color: var(--danger); border-color: #7a3434; }
-.badge.lock { color: var(--accent); border-color: #7a6a24; }
-.type-chip { flex: none; font-size: 12px; border: 2px solid; border-radius: 4px; padding: 0 6px; line-height: 20px; }
-.mini {
-  flex: none; min-width: 44px; min-height: 36px;
-  font-family: var(--font); font-size: 13px; color: var(--text);
-  background: none; border: 2px solid #3a4270; border-radius: 6px; cursor: pointer;
-}
-.mini:active { border-color: var(--accent); color: var(--accent); }
-.mini[disabled] { opacity: .35; }
+
+/* 診断で 出た 卓（A〜H）の しるし */
+.type-chip { flex: none; font-size: 12px; border: 2px solid currentColor; padding: 0 5px; line-height: 20px; }
 
 /* せってい */
-.stepper { display: flex; align-items: center; gap: 10px; padding: 12px 6px 0; font-size: 15px; }
-.stepper .num { font-size: 22px; color: var(--accent); min-width: 1.5em; text-align: center; }
+.stepper { display: flex; align-items: center; gap: 10px; font-size: 15px; }
+.stepper .num { font-size: 24px; color: var(--accent); min-width: 1.4em; text-align: center; }
 
 /* 組んだ 卓 */
-.groups { display: flex; flex-direction: column; gap: 22px; }
-.group .win-title { font-size: 14px; }
-.seats { display: flex; flex-direction: column; gap: 4px; padding-top: 10px; }
+.groups { display: flex; flex-direction: column; gap: 14px; }
+.groups:empty { display: none; }
+.seats { display: flex; flex-direction: column; gap: 4px; }
 .seat {
   display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px;
-  padding: 6px 8px; font-family: var(--font); font-size: 16px; text-align: left;
-  color: var(--text); background: none; border: 2px solid transparent; border-radius: 6px; cursor: pointer;
+  padding: 6px 8px; font-size: 16px; text-align: left; cursor: pointer;
+  color: var(--text); background: none; border: 2px solid transparent;
 }
-.seat.selected { border-color: var(--accent); background: #1a1f0a; }
-.seat.empty { color: #4a5384; justify-content: center; border: 2px dashed #2a3160; }
+.seat.selected { background: var(--text); color: var(--panel); border-color: var(--text); }
+.seat.selected .seat-sub { color: var(--panel); }
+.seat.selected::before { content: "▶"; }
+.seat.empty { color: var(--muted); justify-content: center; border: 2px dashed var(--line); }
 .seat-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .seat-sub { font-size: 11px; color: var(--muted); flex: none; }
-.mood { font-size: 13px; color: var(--muted); border-top: 1px dashed #2a3160; margin-top: 8px; padding-top: 8px; }
+.count { font-size: 12px; color: var(--muted); margin-left: .5em; }
+.mood { font-size: 13px; color: var(--muted); border-top: 2px solid var(--line); margin-top: 8px; padding-top: 8px; }
 .warn-line { font-size: 12px; color: var(--danger); margin-top: 4px; }
 
 /* 印刷：卓ごとに 1まいの ふだ */
 @media print {
-  html, body { background: #fff !important; color: #000 !important; }
-  .topbar, .no-print, .msg { display: none !important; }
-  .app { max-width: none; padding: 0; }
-  .groups { gap: 0; }
-  .group { page-break-after: always; border: 4px solid #000 !important; background: #fff; color: #000; margin: 0; padding: 30px; }
-  .group .win-title { position: static; display: block; font-size: 36px; color: #000 !important; background: none; padding: 0 0 16px; }
-  .seat { color: #000; font-size: 28px; border: 0; }
-  .seat.empty, .seat-sub, .type-chip { display: none; }
-  .mood, .warn-line { color: #000; font-size: 14px; }
+  html, body { background: #fff !important; color: #000 !important; padding: 0 !important; }
+  body::after, #bg, .topbar, .tabbar, .no-print, .msg, .lede, #toast { display: none !important; }
+  .wrap { max-width: none; padding: 0; }
+  .stack, .groups { gap: 0; }
+  .group { page-break-after: always; break-after: page; border: 4px solid #000 !important; box-shadow: none !important; background: #fff !important; color: #000; margin: 0; padding: 30px; }
+  .group > h2 { font-size: 36px; color: #000 !important; border-color: #000 !important; }
+  .group .count { display: none; }
+  .seat { color: #000 !important; background: none !important; font-size: 28px; border: 0; }
+  .seat::before, .seat.empty, .seat-sub, .type-chip { display: none !important; }
+  .mood, .warn-line { color: #000; font-size: 14px; border-color: #000; }
 }
+.stack:empty { display: none; }
