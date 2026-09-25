@@ -1,0 +1,169 @@
+/* ============================================================
+   たくわけの やかた — 見た目
+   ボードゲームライブラリーに あわせた ファミコンRPG風。
+   紺の 背景に、黒地・白わくの ウィンドウを かさねます。
+
+   軽さの ための きまり：
+   ・ずっと 動きつづける 演出は、濃さ（opacity）と 変形（transform）だけ
+   ・影を 動かさない
+   ============================================================ */
+
+:root {
+  --bg: #141c3a;          /* ボードゲームライブラリーと 同じ 紺 */
+  --win: #000;
+  --line: #fff;
+  --text: #fff;
+  --muted: #a7b0d6;
+  --accent: #ffd84a;      /* カーソルと だいじな もじ */
+  --danger: #ff7b7b;
+  --radius: 8px;
+  --font: 'DotGothic16', 'Hiragino Kaku Gothic ProN', 'Noto Sans JP', sans-serif;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  background: var(--bg);
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 17px;
+  line-height: 1.7;
+  min-height: 100vh;
+  min-height: 100dvh;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.app {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 12px 16px calc(24px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ---- 上の 帯 ---- */
+.topbar { display: flex; align-items: center; justify-content: space-between; min-height: 40px; }
+.logo { font-size: 15px; color: var(--accent); letter-spacing: .12em; }
+.chip {
+  font-family: var(--font); font-size: 13px; color: var(--text);
+  background: var(--win); border: 2px solid var(--line); border-radius: 999px;
+  padding: 4px 12px; cursor: pointer;
+}
+.chip.off { color: var(--muted); border-color: var(--muted); }
+
+/* ---- ウィンドウ ---- */
+.win {
+  background: var(--win);
+  border: 3px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  position: relative;
+}
+.win-title {
+  position: absolute; top: -12px; left: 12px;
+  background: var(--win); padding: 0 8px;
+  font-size: 13px; color: var(--accent); line-height: 20px;
+}
+
+/* ---- ぬしの メッセージ ---- */
+.msg { display: flex; gap: 12px; min-height: 132px; padding-top: 18px; cursor: pointer; }
+.msg-icon { font-size: 34px; line-height: 1; flex: none; }
+/* 文字送りの 描き直しを 文字の 部分だけに 閉じこめる（見出しは はみ出すので 箱には かけない） */
+.msg-text { white-space: pre-wrap; flex: 1; contain: layout paint; }
+.msg-next {
+  position: absolute; right: 12px; bottom: 6px;
+  font-size: 12px; color: var(--accent);
+  opacity: 0;
+}
+.msg.done .msg-next { animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 1; } }
+
+/* ---- コマンド（えらぶ ところ）---- */
+.cmd { display: flex; flex-direction: column; padding: 8px 6px; }
+.opt {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; min-height: 52px;
+  padding: 10px 10px;
+  font-family: var(--font); font-size: 17px; line-height: 1.4; text-align: left;
+  color: var(--text); background: none; border: 0; border-radius: 6px;
+  cursor: pointer;
+}
+.opt::before { content: '▶'; font-size: 13px; color: #3a4270; flex: none; width: 14px; }
+.opt:active, .opt:focus-visible { outline: none; background: #121a3a; }
+.opt:active::before, .opt:focus-visible::before { color: var(--accent); }
+.opt.sub { color: var(--muted); font-size: 15px; min-height: 44px; }
+.opt.accent { color: var(--accent); }
+.opt[disabled] { opacity: .4; }
+
+/* ---- 入力 ---- */
+.field { display: flex; gap: 8px; padding: 6px; }
+.input {
+  flex: 1; min-width: 0;
+  font-family: var(--font); font-size: 18px;      /* 16px 未満だと iPhone が 勝手に 拡大する */
+  color: var(--text); background: #0b1026;
+  border: 2px solid var(--muted); border-radius: 6px;
+  padding: 10px 12px;
+  -webkit-user-select: text; user-select: text;
+}
+.input:focus { outline: none; border-color: var(--accent); }
+.btn {
+  font-family: var(--font); font-size: 17px; color: var(--win);
+  background: var(--accent); border: 0; border-radius: 6px;
+  padding: 10px 16px; cursor: pointer; flex: none;
+}
+.btn:active { transform: translateY(1px); }
+
+/* ---- すすみぐあい ---- */
+.progress { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--muted); padding: 0 4px; }
+.pips { display: flex; gap: 4px; }
+.pip { width: 10px; height: 10px; border: 2px solid var(--muted); border-radius: 2px; }
+.pip.on { background: var(--accent); border-color: var(--accent); }
+
+/* ---- 結果 ---- */
+.result-head { text-align: center; padding-top: 20px; }
+.result-label { font-size: 14px; color: var(--muted); }
+.result-name { font-size: 28px; line-height: 1.35; margin: 4px 0 6px; text-shadow: 0 0 10px currentColor; }
+.result-type { font-size: 14px; color: var(--muted); }
+.result-desc { font-size: 15px; line-height: 1.8; padding-top: 6px; -webkit-user-select: text; user-select: text; }
+
+.stats { display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; align-items: center; padding-top: 18px; font-size: 14px; }
+.stat-name { color: var(--text); }
+.stat-bar { display: flex; align-items: center; gap: 8px; }
+.blocks { display: flex; gap: 3px; flex: none; }
+.block { width: 14px; height: 12px; border: 2px solid #3a4270; border-radius: 2px; }
+.block.on { background: var(--accent); border-color: var(--accent); }
+.stat-word { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.code-box { text-align: center; padding-top: 22px; }
+.code {
+  font-size: 44px; letter-spacing: .3em; text-indent: .3em; line-height: 1.2;
+  color: var(--accent);
+  -webkit-user-select: text; user-select: text;
+}
+.code-note { font-size: 13px; color: var(--muted); }
+
+/* ---- 発表された 席 ---- */
+.seat-group .win-title { font-size: 14px; }
+.seat-names { display: flex; flex-wrap: wrap; gap: 6px 14px; padding-top: 6px; font-size: 17px; }
+.seat-names .me { color: var(--accent); }
+
+/* ---- 画面の 切りかえ（一度だけ、濃さと 位置で）---- */
+.screen-in { display: flex; flex-direction: column; gap: 22px; animation: screenIn .16s ease-out; }
+.progress + .win { margin-top: -6px; }
+@keyframes screenIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* ---- iPhone：タップへの 反応を 速くする ---- */
+button, a, input, .msg, .opt { touch-action: manipulation; }
+
+@media (prefers-reduced-motion: reduce) {
+  .screen-in, .msg.done .msg-next { animation: none; }
+  .msg.done .msg-next { opacity: 1; }
+}

@@ -1,0 +1,75 @@
+# 公開の手順（PC作業用）
+
+Claude版の たくわけの やかた を GitHub Pages で公開する手順です。
+GitHub だけで完結します。所要15分ほど。
+
+**旧版はそのまま残して、新しいリポジトリで公開する**やり方にしています。
+新版で会を1回回してみて、問題がなければ旧版を片付けてください。
+
+---
+
+## 1. 新しいリポジトリを作る
+
+1. GitHub 右上の「**+**」→「**New repository**」
+2. 次のとおり入力
+
+   | 項目 | 設定 |
+   |---|---|
+   | Repository name | `takuwake-claude`（好きな名前で構いません） |
+   | 公開設定 | **Public**（GitHub Pages の無料版に必要） |
+   | Add a README file | チェックを入れる |
+
+3. 「**Create repository**」
+
+## 2. PCに取り込む
+
+1. GitHub Desktop →「File」→「**Clone repository**」
+2. 「GitHub.com」タブから `takuwake-claude` を選んで「**Clone**」
+
+## 3. ファイルを入れる
+
+1. GitHub Desktop の「Repository」→「**Show in Explorer**」
+2. 中の `README.md` を削除
+3. このフォルダの**中身**をすべてコピーして貼り付け
+
+   ```
+   assets   css   js          ← フォルダ3つ
+   index.html   kumi.html   README.md   SETUP.md   .gitignore
+   ```
+
+## 4. GitHub へ送る
+
+1. GitHub Desktop に戻る
+2. 変更一覧に `assets/audio/bgm_main.mp3` のように**スラッシュ付き**で並んでいることを確認
+3. Summary に `Claude版 第1段階` と入力
+4. 「**Commit to main**」→「**Push origin**」
+
+## 5. 公開設定
+
+1. リポジトリの「**Settings**」→「**Pages**」
+2. Source: `Deploy from a branch`
+3. Branch: `main` / `(root)` →「**Save**」
+4. 数分で URL が出ます
+
+   `https://qiubenrixiang-creator.github.io/takuwake-claude/`
+
+---
+
+## 6. 動作確認（iPhoneで）
+
+- [ ] 紺の背景に、黒地・白わくのウィンドウが出る
+- [ ] 「はじめる」で音が鳴る
+- [ ] 文字送りの途中でも、選択肢を押せる
+- [ ] 最後まで答えると、卓・つよさ・4文字の合言葉が出る
+- [ ] 名前の入力欄に `たくぐみ` で、たくぐみの ま へ入れる
+- [ ] 名前と合言葉を入れて「むかえる」→ 2人以上で「たくを くむ」
+- [ ] 「はっぴょう リンクを コピー」→ そのリンクを別の端末で開くと、席が出る
+
+---
+
+## ファイルを直すとき
+
+1. PCのフォルダでファイルを直す
+2. GitHub Desktop で「Commit to main」→「Push origin」
+
+文章や質問は `js/data.js` だけで直せます。
