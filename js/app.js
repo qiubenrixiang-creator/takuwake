@@ -204,7 +204,7 @@ function titleScreen() {
     extra.push(linkCard('seat', 'きょうの せき', 'かんじが はっぴょう した せきを みる', () => { Sound.se('decide'); seatsScreen(); }));
   }
   if (isHost()) {
-    extra.unshift(linkCard('key', 'たくぐみの ま', 'かんじの へや：せきを くんで はっぴょう する', () => { Sound.se('decide'); location.href = 'kumi.html'; }));
+    extra.unshift(linkCard('key', SITE.room, 'かんじの へや：せきを くんで はっぴょう する', () => { Sound.se('decide'); location.href = 'kumi.html'; }));
   }
   if (last && TABLES[last.table]) {
     const t = TABLES[last.table];
@@ -602,15 +602,16 @@ function settingsScreen(line) {
   const becomeHost = () => {
     Store.set('role', 'host');
     Sound.se('fanfare');
-    settingsScreen(LINES.hostOk);
+    settingsScreen(LINES.hostOk.replace('{room}', SITE.room));
   };
   const askPass = () => {
     if (host) return;
     if (!ADMIN_WORDS.kumi) return becomeHost();
     Sound.se('cursor');
-    const pass = h('input', { type: 'password', placeholder: 'あいことば', autocomplete: 'off', enterkeyhint: 'done', 'aria-label': 'かんじの あいことば' });
+    // type="password" だと iPhone で 英字しか 打てないので、ふつうの 文字入力に する
+    const pass = h('input', { type: 'text', placeholder: 'あいことば', autocomplete: 'off', autocorrect: 'off', autocapitalize: 'off', spellcheck: 'false', enterkeyhint: 'done', 'aria-label': 'かんじの あいことば' });
     const check = () => {
-      if (pass.value.trim() === ADMIN_WORDS.kumi) becomeHost();
+      if (normWord(pass.value) === normWord(ADMIN_WORDS.kumi)) becomeHost();
       else { Sound.se('cancel'); pass.value = ''; say(LINES.hostNg); }
     };
     pass.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); check(); } });
@@ -631,9 +632,9 @@ function settingsScreen(line) {
     ]),
     passBox,
     h('p', { class: 'count', style: 'margin:8px 0 0', text: host
-      ? 'この スマホで「たくぐみの ま」に 入れます。'
-      : 'かんじを えらぶと、この スマホで「たくぐみの ま」に 入れるように なります。' }),
-    host ? linkCard('key', 'たくぐみの ま へ', 'せきを くんで はっぴょう する', () => { Sound.se('decide'); location.href = 'kumi.html'; }) : null
+      ? 'この スマホで「' + SITE.room + '」に 入れます。'
+      : 'かんじを えらぶと、この スマホで「' + SITE.room + '」に 入れるように なります。' }),
+    host ? linkCard('key', SITE.room + ' へ', 'せきを くんで はっぴょう する', () => { Sound.se('decide'); location.href = 'kumi.html'; }) : null
   ]);
 
   // きろくを けす
@@ -646,7 +647,7 @@ function settingsScreen(line) {
       run: () => { Store.remove('seats'); Store.remove('seatsSeen'); } },
     { label: 'ずかんと しょうごう', note: 'しんだん ' + r.runs + 'かい・しょうごう ' + titlesN + 'こ', has: r.runs > 0 || titlesN > 0,
       run: () => { Record.clear(); } },
-    { label: 'ぜんぶ', note: 'なまえ・やくわり・たくぐみの めいぼ も ふくむ', has: true,
+    { label: 'ぜんぶ', note: 'なまえ・やくわり・' + SITE.room + 'の めいぼ も ふくむ', has: true,
       run: () => { clearAllLocal(); } }
   ];
   const delWin = h('section', { class: 'win' }, [
@@ -674,6 +675,12 @@ function settingsScreen(line) {
   });
 }
 
+// あいことばを くらべる ために そろえる（空白・全角半角・カタカナ／ひらがな の ちがいを なくす）
+function normWord(v) {
+  return String(v || '').normalize('NFKC').replace(/\s+/g, '').toLowerCase()
+    .replace(/[\u30a1-\u30f6]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0x60));
+}
+
 // この スマホに ある やかたの きろくを すべて けす（BGL の データには さわらない）
 function clearAllLocal() {
   try {
@@ -696,6 +703,8 @@ function importPublished() {
   return true;
 }
 
+// BGM を よやく（読みこみは すぐ はじまり、画面に さわった 瞬間に 鳴る）
+Sound.bgm('main');
 paintIcons(document);
 bindTopbar(() => { state.started = true; Sound.bgm('main'); });
 if (importPublished()) seatsScreen();

@@ -146,12 +146,19 @@ const Sound = (function () {
     defs[name].b = (b + 1) / buf.sampleRate;
   }
 
+  // ページを 開いた 時点で、効果音も BGM も 読みこんで おく。
+  // こうして おくと、画面に さわった 瞬間に すぐ 鳴らせる（読みこみ待ちで 遅れない）。
+  // 画面の 表示を じゃま しないよう、効果音 → BGM の 順に、表示の あとで 読む。
   function load(map) {
     Object.keys(map).forEach((k) => { defs[k] = Object.assign({}, map[k]); });
-    if (getCtx()) {
-      // 効果音は 小さいので 先に 読んでおく。BGM は 鳴らす ときに 読む（通信の せつやく）
-      Object.keys(map).forEach((k) => { if (!map[k].loop) fetchBuf(k).catch(() => {}); });
-    }
+    if (!getCtx()) return;
+    const keys = Object.keys(map);
+    const go = () => {
+      Promise.all(keys.filter((k) => !map[k].loop).map((k) => fetchBuf(k).catch(() => {})))
+        .then(() => keys.filter((k) => map[k].loop).forEach((k) => fetchBuf(k).catch(() => {})));
+    };
+    if (document.readyState === 'complete') setTimeout(go, 0);
+    else window.addEventListener('load', () => setTimeout(go, 0), { once: true });
   }
 
   // 画面を おすたびに よぶ。止まって いたら 目を さます。
@@ -229,10 +236,11 @@ const Sound = (function () {
       src.buffer = buf;
       src.loop = true;
       if (d.b) { src.loopStart = d.a; src.loopEnd = d.b; }
+      // すぐに 聞こえるよう、ふわっと 出す 時間は ごく 短く
       const vol = d.volume == null ? 1 : d.volume;
       const t = ctx.currentTime;
       g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(vol, t + 0.4);
+      g.gain.linearRampToValueAtTime(vol, t + 0.06);
       src.connect(g); g.connect(ctx.destination);
       src.start(0, d.a || 0);
       bgmVoice = { name, src, g };
@@ -367,7 +375,7 @@ function ask(msg, onYes, opts) {
 }
 
 // ---- やくわり（さんかしゃ／かんじ）----------------------------------
-// せっていで「かんじ」を えらんだ スマホだけが たくぐみの まに 入れます。
+// せっていで「かんじ」を えらんだ スマホだけが さくせんしつに 入れます。
 function isHost() { return Store.get('role', '') === 'host'; }
 
 // ---- 上の バー（♪・SE・よる）を つなぐ ---------------------------

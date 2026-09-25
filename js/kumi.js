@@ -1,5 +1,5 @@
 // ============================================================
-//  kumi.js — たくぐみの ま（幹事用）
+//  kumi.js — さくせんしつ（幹事用）
 //
 //  参加者の「なまえ」と「4文字の 合言葉」を 打ちこみ、
 //  全員 そろったら まとめて 卓を 組みます。通信は しません。
@@ -52,8 +52,10 @@ let $say = null;
 function say(text) { if ($say) $say.textContent = text; }
 
 // ---- おと ------------------------------------------------
-// 最初に 画面を おした 瞬間に 許可を とって、たくぐみの ま の BGM を ながす
-document.addEventListener('click', () => { Sound.unlock(); Sound.bgm('kumi'); }, { capture: true, once: true });
+// 部屋に 入った 時点で BGM を よやく しておく。
+// 読みこみは すぐ はじまり、iPhone では 画面に さわった 瞬間（指を おいた とき）に 鳴りだす。
+// 前の ページで すでに 音を ゆるされて いる ブラウザでは、入った とたんに 鳴る。
+Sound.bgm('kumi');
 
 // ---- 扉の 錠 ------------------------------------------------
 // やかたの「せってい」で かんじを えらんだ スマホだけが 入れます。
@@ -88,7 +90,7 @@ function mainScreen() {
   $rosterTitle = h('h2', { text: 'めいぼ' });
 
   show([
-    h('h1', { class: 'lede', text: 'たくぐみの ま' }),
+    h('h1', { class: 'lede', text: SITE.room }),
     h('div', { class: 'stack' }, [
       h('div', { class: 'no-print' }, [nushi($say)]),
       win('むかえる', [
@@ -318,7 +320,7 @@ function copyText() {
 }
 
 function clearAll() {
-  ask('めいぼと たくぐみを すべて けします。よろしいですか。', () => {
+  ask('めいぼと くんだ たくを すべて けします。よろしいですか。', () => {
     Sound.se('cancel');
     K.roster = []; K.groups = null; K.names = null; K.selected = null;
     save();
@@ -328,6 +330,9 @@ function clearAll() {
 }
 
 // ---- はじまり ----------------------------------------------
+// へやの 名前を data.js の SITE.room に そろえる
+document.title = SITE.room + '｜' + SITE.title;
+document.querySelectorAll('[data-room]').forEach((el) => { el.textContent = el.dataset.room === 'tab' ? SITE.roomTab : SITE.room; });
 paintIcons(document);
 bindTopbar(() => Sound.bgm('kumi'));
 const $library = document.getElementById('tab-library');
