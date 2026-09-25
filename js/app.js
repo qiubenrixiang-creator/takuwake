@@ -156,6 +156,7 @@ $tabs.forEach((t) => t.addEventListener('click', () => {
   Sound.se('cursor');
   if (t.dataset.tab === 'seat') seatsScreen();
   else if (t.dataset.tab === 'zukan') zukanScreen();
+  else if (t.dataset.tab === 'set') settingsScreen();
   else titleScreen();
 }));
 const $library = document.getElementById('tab-library');
@@ -202,6 +203,9 @@ function titleScreen() {
   if (seats && seats.seats && seats.seats.length) {
     extra.push(linkCard('seat', 'きょうの せき', 'かんじが はっぴょう した せきを みる', () => { Sound.se('decide'); seatsScreen(); }));
   }
+  if (isHost()) {
+    extra.unshift(linkCard('key', 'たくぐみの ま', 'かんじの へや：せきを くんで はっぴょう する', () => { Sound.se('decide'); location.href = 'kumi.html'; }));
+  }
   if (last && TABLES[last.table]) {
     const t = TABLES[last.table];
     extra.push(linkCard('star', 'まえの けっか', t.label + ' ' + t.name + '・あいことば ' + last.code, () => { Sound.se('decide'); resultScreen(last, false); }));
@@ -234,12 +238,6 @@ function nameScreen() {
 
 function submitName(raw) {
   const name = String(raw || '').trim();
-  if (name === ADMIN_WORDS.kumi) {
-    try { sessionStorage.setItem('takuwake2.kumiPass', '1'); } catch (e) {}
-    Sound.se('decide');
-    location.href = 'kumi.html';
-    return;
-  }
   if (!name) { Sound.se('cancel'); return say(LINES.noName); }
   if (NG_WORDS.test(name)) { Sound.se('cancel'); return say(LINES.badName); }
   state.name = name;
@@ -386,7 +384,16 @@ function resultScreen(res, fresh, newTitles) {
       h('div', { class: 'nt-desc', text: nt.desc })
     ]))).concat([h('button', { class: 'btn small', type: 'button', text: 'ずかんで みる ▶', onclick: () => { Sound.se('decide'); zukanScreen(); } })])));
   }
+  const del = h('div', { class: 'back-row' }, [h('button', { class: 'btn danger small', type: 'button', text: 'この けっかを けす', onclick: () => {
+    ask('この しんだん けっかを けします。よろしいですか。\n（ずかんと しょうごうは のこります）', () => {
+      Store.remove('last');
+      Sound.se('cancel');
+      toast('けっかを けしました');
+      titleScreen();
+    }, { yes: 'けす', danger: true });
+  } })]);
   render({
+    after: [del],
     lede: 'しんだん けっか',
     text: fresh ? (newTitles && newTitles.length ? LINES.newTitle : LINES.result) : LINES.resume.replace('{name}', res.name),
     extra,
@@ -529,11 +536,12 @@ function pickTitle(key) {
 }
 
 function clearRecord() {
-  if (!confirm('ずかんと しょうごうの きろくを すべて けします。よろしいですか。\n（まえの けっかと きょうの せきは のこります）')) return;
-  Record.clear();
-  Sound.se('cancel');
-  toast('ずかんを しろしに もどしました');
-  zukanScreen();
+  ask('ずかんと しょうごうの きろくを すべて けします。よろしいですか。\n（まえの けっかと きょうの せきは のこります）', () => {
+    Record.clear();
+    Sound.se('cancel');
+    toast('ずかんを しろしに もどしました');
+    zukanScreen();
+  }, { yes: 'けす', danger: true });
 }
 
 function tableScreen(key) {
@@ -567,6 +575,115 @@ function tableScreen(key) {
   });
 }
 
+// ---- せってい ----------------------------------------------
+// なまえ・やくわり（さんかしゃ／かんじ）・きろくを けす
+function settingsScreen(line) {
+  const name = Store.get('name', '');
+  const host = isHost();
+
+  // なまえ
+  const nameIn = h('input', { type: 'text', value: name, maxlength: '12', placeholder: 'なまえ', autocomplete: 'off', enterkeyhint: 'done', 'aria-label': 'なまえ' });
+  const saveName = () => {
+    const v = nameIn.value.trim();
+    if (!v) { Sound.se('cancel'); return say(LINES.noName); }
+    if (NG_WORDS.test(v)) { Sound.se('cancel'); return say(LINES.badName); }
+    state.name = v; Store.set('name', v);
+    Sound.se('decide'); toast('なまえを「' + v + '」に しました');
+  };
+  nameIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); saveName(); } });
+  const nameWin = h('section', { class: 'win' }, [
+    h('h2', { text: 'なまえ' }),
+    h('div', { class: 'field' }, [nameIn, h('button', { class: 'btn primary', type: 'button', text: 'けってい', onclick: saveName })]),
+    h('p', { class: 'count', style: 'margin:8px 0 0', text: 'はっぴょうされた せきで「おぬし」の しるしが つく なまえです。' })
+  ]);
+
+  // やくわり
+  const passBox = h('div');
+  const becomeHost = () => {
+    Store.set('role', 'host');
+    Sound.se('fanfare');
+    settingsScreen(LINES.hostOk);
+  };
+  const askPass = () => {
+    if (host) return;
+    if (!ADMIN_WORDS.kumi) return becomeHost();
+    Sound.se('cursor');
+    const pass = h('input', { type: 'password', placeholder: 'あいことば', autocomplete: 'off', enterkeyhint: 'done', 'aria-label': 'かんじの あいことば' });
+    const check = () => {
+      if (pass.value.trim() === ADMIN_WORDS.kumi) becomeHost();
+      else { Sound.se('cancel'); pass.value = ''; say(LINES.hostNg); }
+    };
+    pass.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); check(); } });
+    passBox.replaceChildren(h('div', { class: 'field', style: 'margin-top:10px' }, [pass, h('button', { class: 'btn primary', type: 'button', text: 'けってい', onclick: check })]));
+    say(LINES.hostAsk);
+    setTimeout(() => { try { pass.focus({ preventScroll: true }); } catch (e) {} }, 50);
+  };
+  const roleWin = h('section', { class: 'win' }, [
+    h('h2', { text: 'やくわり' }),
+    h('div', { class: 'role-row' }, [
+      h('button', { class: 'btn' + (host ? '' : ' picked'), type: 'button', text: 'さんかしゃ', onclick: () => {
+        if (!host) return;
+        Store.remove('role');
+        Sound.se('cancel');
+        settingsScreen(LINES.hostOff);
+      } }),
+      h('button', { class: 'btn' + (host ? ' picked' : ''), type: 'button', text: 'かんじ', onclick: askPass })
+    ]),
+    passBox,
+    h('p', { class: 'count', style: 'margin:8px 0 0', text: host
+      ? 'この スマホで「たくぐみの ま」に 入れます。'
+      : 'かんじを えらぶと、この スマホで「たくぐみの ま」に 入れるように なります。' }),
+    host ? linkCard('key', 'たくぐみの ま へ', 'せきを くんで はっぴょう する', () => { Sound.se('decide'); location.href = 'kumi.html'; }) : null
+  ]);
+
+  // きろくを けす
+  const r = Record.load();
+  const titlesN = Object.keys(Store.get('titles', {})).length;
+  const items = [
+    { label: 'まえの しんだん けっか', note: 'けっか・あいことば', has: !!Store.get('last', null),
+      run: () => { Store.remove('last'); } },
+    { label: 'きょうの せき', note: 'かんじが はっぴょう した せき', has: !!Store.get('seats', null),
+      run: () => { Store.remove('seats'); Store.remove('seatsSeen'); } },
+    { label: 'ずかんと しょうごう', note: 'しんだん ' + r.runs + 'かい・しょうごう ' + titlesN + 'こ', has: r.runs > 0 || titlesN > 0,
+      run: () => { Record.clear(); } },
+    { label: 'ぜんぶ', note: 'なまえ・やくわり・たくぐみの めいぼ も ふくむ', has: true,
+      run: () => { clearAllLocal(); } }
+  ];
+  const delWin = h('section', { class: 'win' }, [
+    h('h2', { text: 'きろくを けす' }),
+    h('div', { class: 'set-list' }, items.map((it) => h('div', { class: 'set-item' }, [
+      h('div', { class: 'set-text' }, [it.label, h('small', { text: it.has ? it.note : 'なにも ない' })]),
+      h('button', { class: 'btn danger small', type: 'button', text: 'けす', disabled: it.has ? null : 'disabled', onclick: () => {
+        ask('「' + it.label + '」を けします。\nけした ものは もとに もどせません。よろしいですか。', () => {
+          it.run();
+          Sound.se('cancel');
+          toast('「' + it.label + '」を けしました');
+          paintSeatDot(); paintZukanDot();
+          settingsScreen(LINES.deleted);
+        }, { yes: 'けす', danger: true });
+      } })
+    ])))
+  ]);
+
+  render({
+    tab: 'set',
+    lede: 'せってい',
+    sub: 'なまえ・やくわり・きろくの せいり。おと と よる／ひる は うえの ボタンで かえられます。',
+    text: line || LINES.settings,
+    extra: [nameWin, roleWin, delWin]
+  });
+}
+
+// この スマホに ある やかたの きろくを すべて けす（BGL の データには さわらない）
+function clearAllLocal() {
+  try {
+    const keys = [];
+    for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.indexOf(Store.prefix) === 0) keys.push(k); }
+    keys.forEach((k) => localStorage.removeItem(k));
+  } catch (e) {}
+  state.name = '';
+}
+
 // ---- はじまり ----------------------------------------------
 // 幹事の 発表リンク（#r=...）で 開かれたら、席を この端末に 取りこむ
 function importPublished() {
@@ -582,6 +699,7 @@ function importPublished() {
 paintIcons(document);
 bindTopbar(() => { state.started = true; Sound.bgm('main'); });
 if (importPublished()) seatsScreen();
+else if (location.hash === '#settings') { history.replaceState(null, '', location.pathname + location.search); settingsScreen(); }
 else titleScreen();
 paintSeatDot();
 paintZukanDot();

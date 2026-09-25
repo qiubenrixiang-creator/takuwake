@@ -319,3 +319,21 @@ html[data-theme="day"] .win > h2.tc { color: var(--tc-day, var(--tc, var(--accen
 .nt-name { display: flex; align-items: center; gap: 8px; font-size: 17px; color: var(--accent); }
 .nt-ico { width: 20px; height: 20px; flex: none; }
 .nt-desc { font-size: 13px; color: var(--muted); line-height: 1.7; }
+
+/* ---- たしかめの まど（BGL と 同じ）---- */
+.dialog-back { position: fixed; inset: 0; z-index: 140; display: grid; place-items: center; padding: 22px; background: rgba(0,0,0,.65); }
+.dialog-back[hidden] { display: none; }
+.dialog-win { background: var(--panel); border: 3px solid var(--frame); box-shadow: var(--shadow); padding: 18px 18px 16px; max-width: 420px; width: 100%; }
+.dialog-win p { margin: 0 0 16px; font-size: 15px; line-height: 1.8; white-space: pre-wrap; }
+.dialog-win p::before { content: "▼ "; color: var(--accent); }
+.dialog-win .btn-row { gap: 10px; }
+.dialog-win .btn.small { width: auto; flex: 1; padding: 11px 12px; font-size: 15px; }
+.btn[disabled] { opacity: .4; cursor: default; }
+.btn[disabled]:active { transform: none; box-shadow: var(--shadow); }
+.role-row { display: flex; gap: 10px; }
+.role-row .btn { flex: 1; }
+.set-list { display: flex; flex-direction: column; gap: 10px; }
+.set-item { display: flex; align-items: center; gap: 10px; }
+.set-item .set-text { flex: 1; min-width: 0; font-size: 14px; line-height: 1.5; }
+.set-item .set-text small { display: block; font-size: 11.5px; color: var(--muted); }
+.set-item .btn { width: auto; flex: none; }

@@ -80,88 +80,217 @@ const Theme = {
 Theme.apply(Theme.get());
 
 // ---- 音 --------------------------------------------------
-// play() は「鳴らす じゅんびを せよ」という 要求で、音が 出るまで 時間差が あります。
-// その間に 止めても あとから 鳴りだすので、札を つけて 確実に 止めます。
+// ボードゲームライブラリーと 同じく Web Audio で 鳴らします。
+//
+// まえは ふつうの Audio（<audio>）で 鳴らして いましたが、iPhone では
+//   ・画面を おした その 瞬間 以外に 鳴らすと、だまって ことわられる
+//   ・同じ 音を つづけて 鳴らすと、まえの 指示が あとの 音を 止めてしまう
+//   ・ほかの アプリに 切りかえたり 画面を ロックすると、そのまま 止まる
+// という ことが 起きて、とちゅうで 音が 鳴らなく なって いました。
+//
+// Web Audio は、一度 画面を おして 目を さませば、あとは いつでも 何度でも 鳴らせます。
+// 止まって しまっても、つぎに 画面を おした ときに かならず 目を さまします。
+// 音の データは 最初に 1回だけ 読みこみ、あとは それを 使いまわします。
 const Sound = (function () {
-  const nativePlay = HTMLMediaElement.prototype.play;
-  const nativePause = HTMLMediaElement.prototype.pause;
-  const bank = {};
+  const AC = window.AudioContext || window.webkitAudioContext;
+  // Web Audio は 音の ファイルを 読みこむ（fetch）ので、サイトとして 開いた ときだけ 使う。
+  // パソコンで index.html を 直接 開いた ときは、ふつうの Audio で 鳴らす。
+  const useCtx = !!AC && /^https?:$/.test(location.protocol);
+  let ctx = null;
+  let unlocked = false;
+  const defs = {};      // name → { src, loop, volume }
+  const bufs = {};      // name → 読みこんだ 音
+  const loading = {};   // name → 読みこみ中
+  const voices = {};    // name → 鳴っている 音（止める ため）
+  const els = {};       // ふつうの Audio（よび）
   let bgmOn = Shared.read('bgm', true) !== false;
   let seOn = Shared.read('se', true) !== false;
-  let ready = null;          // 許可を とり終えたら 解決する
   let currentBgm = null;
+  let bgmVoice = null;  // { name, src, g }
 
-  function make(src, loop, volume) {
-    const a = new Audio(src);
-    a.preload = 'auto';
-    a.loop = !!loop;
-    a.volume = volume == null ? 1 : volume;
-    let token = 0;
-    a._play = function () {
-      const mine = ++token;
-      let p;
-      try { p = nativePlay.call(a); } catch (e) { return; }
-      if (p && p.then) p.then(() => { if (mine !== token) { nativePause.call(a); a.currentTime = 0; } }).catch(() => {});
-    };
-    a._stop = function () { token++; try { nativePause.call(a); } catch (e) {} };
-    return a;
+  function getCtx() {
+    if (ctx || !useCtx) return ctx;
+    try { ctx = new AC(); } catch (e) { ctx = null; }
+    return ctx;
+  }
+
+  function wake() {
+    if (ctx && ctx.state !== 'running') { try { const p = ctx.resume(); if (p && p.catch) p.catch(() => {}); } catch (e) {} }
+  }
+
+  function fetchBuf(name) {
+    if (bufs[name]) return Promise.resolve(bufs[name]);
+    if (loading[name]) return loading[name];
+    const c = getCtx();
+    if (!c || !defs[name]) return Promise.reject(new Error('no'));
+    const p = fetch(defs[name].src)
+      .then((r) => { if (!r.ok) throw new Error('notfound'); return r.arrayBuffer(); })
+      .then((ab) => new Promise((ok, ng) => {
+        // ふるい Safari は コールバック しか 使えない
+        const pr = c.decodeAudioData(ab, ok, ng);
+        if (pr && pr.then) pr.then(ok, ng);
+      }))
+      .then((buf) => { bufs[name] = buf; if (defs[name].loop) measure(name, buf); return buf; });
+    loading[name] = p;
+    p.catch(() => { delete loading[name]; });
+    return p;
+  }
+
+  // mp3 の 前後に つく 無音を はかって、くりかえしの つなぎめを なめらかに する
+  function measure(name, buf) {
+    const d = buf.getChannelData(0), n = d.length, TH = 0.0015;
+    let a = 0; while (a < n && Math.abs(d[a]) < TH) a++;
+    let b = n - 1; while (b > a && Math.abs(d[b]) < TH) b--;
+    if (b - a < buf.sampleRate) { a = 0; b = n - 1; }
+    defs[name].a = a / buf.sampleRate;
+    defs[name].b = (b + 1) / buf.sampleRate;
   }
 
   function load(map) {
-    Object.keys(map).forEach((k) => { const m = map[k]; bank[k] = make(m.src, m.loop, m.volume); });
+    Object.keys(map).forEach((k) => { defs[k] = Object.assign({}, map[k]); });
+    if (getCtx()) {
+      // 効果音は 小さいので 先に 読んでおく。BGM は 鳴らす ときに 読む（通信の せつやく）
+      Object.keys(map).forEach((k) => { if (!map[k].loop) fetchBuf(k).catch(() => {}); });
+    }
   }
 
-  // iPhone は「一度も 鳴らしたことの ない 音」を あとから 鳴らせません。
-  // 画面を おした（click の）瞬間に、すべての 音に 無音で 許可を とります。
-  // 許可を とり終えるまでは、鳴らす指示を 順番に 待たせます（途中で 鳴らすと 止められるため）。
+  // 画面を おすたびに よぶ。止まって いたら 目を さます。
   function unlock() {
-    if (ready) return ready;
-    ready = Promise.all(Object.values(bank).map((a) => new Promise((done) => {
-      const settle = () => { try { nativePause.call(a); a.currentTime = 0; } catch (e) {} a.muted = false; done(); };
+    const c = getCtx();
+    if (!c) return;
+    wake();
+    if (!unlocked) {
+      unlocked = true;
+      // 無音を ひとつ 鳴らして iPhone の ロックを はずす
       try {
-        a.muted = true;
-        const p = nativePlay.call(a);
-        if (p && p.then) p.then(settle).catch(settle); else settle();
-      } catch (e) { a.muted = false; done(); }
-    })));
-    return ready;
+        const s = c.createBufferSource();
+        s.buffer = c.createBuffer(1, 1, 22050);
+        s.connect(c.destination);
+        s.start(0);
+      } catch (e) {}
+    }
+    if (bgmOn && currentBgm && !bgmVoice) startBgm();
   }
 
-  function whenReady(fn) { if (ready) ready.then(fn); }
+  // ---- ふつうの Audio（よび）----
+  function el(name) {
+    if (!els[name]) {
+      const a = new Audio(defs[name].src);
+      a.loop = !!defs[name].loop;
+      a.volume = defs[name].volume == null ? 1 : defs[name].volume;
+      els[name] = a;
+    }
+    return els[name];
+  }
 
   function se(name) {
-    if (!seOn || !bank[name]) return;
-    whenReady(() => { const a = bank[name]; a.currentTime = 0; a._play(); });
+    if (!seOn || !defs[name]) return;
+    if (!ctx) {
+      try { const a = el(name); a.currentTime = 0; const p = a.play(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+      return;
+    }
+    wake();
+    const buf = bufs[name];
+    if (!buf) { fetchBuf(name).catch(() => {}); return; }   // まだ 読みこみ中なら 今回は 鳴らさない（遅れて 鳴るのを ふせぐ）
+    try {
+      const src = ctx.createBufferSource();
+      const g = ctx.createGain();
+      g.gain.value = defs[name].volume == null ? 1 : defs[name].volume;
+      src.buffer = buf;
+      src.connect(g); g.connect(ctx.destination);
+      const v = { src };
+      (voices[name] = voices[name] || []).push(v);
+      src.onended = () => { voices[name] = (voices[name] || []).filter((x) => x !== v); };
+      src.start(0);
+    } catch (e) {}
   }
 
   function stop(name) {
-    if (!bank[name]) return;
-    bank[name]._stop();
-    whenReady(() => bank[name]._stop());
+    if (els[name]) { try { els[name].pause(); } catch (e) {} }
+    (voices[name] || []).forEach((v) => { try { v.src.onended = null; v.src.stop(0); } catch (e) {} });
+    voices[name] = [];
+  }
+
+  function startBgm() {
+    const name = currentBgm;
+    if (!bgmOn || !name || !defs[name]) return;
+    if (!ctx) {
+      try { const a = el(name); const p = a.play(); if (p && p.catch) p.catch(() => {}); } catch (e) {}
+      return;
+    }
+    if (bgmVoice) return;
+    wake();
+    fetchBuf(name).then((buf) => {
+      // 読みこみの あいだに 止められた・曲が 変わった・もう 鳴っている ときは 何もしない
+      if (!bgmOn || currentBgm !== name || bgmVoice) return;
+      const d = defs[name];
+      const src = ctx.createBufferSource();
+      const g = ctx.createGain();
+      src.buffer = buf;
+      src.loop = true;
+      if (d.b) { src.loopStart = d.a; src.loopEnd = d.b; }
+      const vol = d.volume == null ? 1 : d.volume;
+      const t = ctx.currentTime;
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(vol, t + 0.4);
+      src.connect(g); g.connect(ctx.destination);
+      src.start(0, d.a || 0);
+      bgmVoice = { name, src, g };
+    }).catch(() => {});
+  }
+
+  function stopBgm() {
+    Object.keys(els).forEach((k) => { if (defs[k] && defs[k].loop) { try { els[k].pause(); } catch (e) {} } });
+    if (!bgmVoice || !ctx) { bgmVoice = null; return; }
+    const v = bgmVoice;
+    bgmVoice = null;
+    try {
+      const t = ctx.currentTime;
+      v.g.gain.cancelScheduledValues(t);
+      v.g.gain.setValueAtTime(v.g.gain.value, t);
+      v.g.gain.linearRampToValueAtTime(0, t + 0.15);
+      v.src.stop(t + 0.2);
+    } catch (e) {}
   }
 
   function bgm(name) {
-    if (currentBgm && currentBgm !== name && bank[currentBgm]) bank[currentBgm]._stop();
+    if (bgmVoice && bgmVoice.name !== name) stopBgm();
     currentBgm = name;
-    if (!bgmOn || !bank[name]) return;
-    whenReady(() => { if (bgmOn && currentBgm === name) bank[name]._play(); });
+    startBgm();
   }
 
   function setBgm(on) {
     bgmOn = !!on;
     Shared.write('bgm', bgmOn);
-    if (!currentBgm || !bank[currentBgm]) return;
-    if (bgmOn) { unlock(); whenReady(() => { if (bgmOn) bank[currentBgm]._play(); }); }
-    else bank[currentBgm]._stop();
+    if (bgmOn) startBgm(); else stopBgm();
   }
 
   function setSe(on) {
     seOn = !!on;
     Shared.write('se', seOn);
-    if (seOn) unlock();
   }
 
-  return { load, unlock, se, stop, bgm, setBgm, setSe, isBgm: () => bgmOn, isSe: () => seOn };
+  // 画面を おすたびに 目を さます（ほかの アプリから もどった あとや、電話の あとでも 鳴るように）
+  ['pointerdown', 'touchend', 'click', 'keydown'].forEach((t) => {
+    document.addEventListener(t, unlock, { capture: true, passive: true });
+  });
+  // うらに まわったら 止めて、もどったら 再開する（電池の せつやく と、止まったままを ふせぐ）
+  document.addEventListener('visibilitychange', () => {
+    if (!ctx) {
+      if (document.hidden) Object.keys(els).forEach((k) => { if (defs[k].loop) try { els[k].pause(); } catch (e) {} });
+      else if (bgmOn && currentBgm) startBgm();
+      return;
+    }
+    if (document.hidden) { try { ctx.suspend(); } catch (e) {} }
+    else if (unlocked) wake();
+  });
+
+  return {
+    load, unlock, se, stop, bgm, setBgm, setSe,
+    isBgm: () => bgmOn, isSe: () => seOn,
+    // ようすを しらべる ため（テスト用）
+    debug: () => ({ mode: useCtx ? 'webaudio' : 'audio', state: ctx ? ctx.state : 'none', bgm: bgmVoice ? bgmVoice.name : null, loaded: Object.keys(bufs) })
+  };
 })();
 
 // ---- ドット絵の アイコン（BGLと 同じ 描きかた）------------------
@@ -174,6 +303,7 @@ const ICONS = {
   chest:  ['..####..', '.######.', '.#.##.#.', '########', '#..##..#', '#..##..#', '########', '........'],
   key:    ['.###....', '#...#...', '#...####', '#...#.#.', '.###....', '........', '........', '........'],
   door:   ['.######.', '.#....#.', '.#....#.', '.#....#.', '.#...##.', '.#....#.', '.#....#.', '.######.'],
+  gear:   ['..#..#..', '.######.', '.#....#.', '##....##', '##....##', '.#....#.', '.######.', '..#..#..'],
   book:   ['.######.', '.#..#.#.', '.#..#.#.', '.#..#.#.', '.#..#.#.', '.#..#.#.', '.######.', '........'],
   crown:  ['........', '#..##..#', '#.####.#', '########', '########', '.######.', '.######.', '........'],
   lock:   ['..####..', '.#....#.', '.#....#.', '########', '###..###', '###..###', '########', '........'],
@@ -204,6 +334,41 @@ function toast(text) {
   clearTimeout(el._t);
   el._t = setTimeout(() => el.classList.remove('show'), 1800);
 }
+
+// ---- たしかめの まど（BGL の ask と 同じ）--------------------------
+// ask('けしますか？', () => { けす }, { yes: 'けす', danger: true })
+function ask(msg, onYes, opts) {
+  opts = opts || {};
+  let back = document.getElementById('dialog');
+  if (!back) {
+    back = h('div', { id: 'dialog', class: 'dialog-back', hidden: 'hidden' }, [
+      h('div', { class: 'dialog-win', role: 'dialog', 'aria-modal': 'true' }, [
+        h('p', { id: 'dialog-msg' }),
+        h('div', { class: 'btn-row' }, [
+          h('button', { class: 'btn small', type: 'button', id: 'dialog-no' }),
+          h('button', { class: 'btn small primary', type: 'button', id: 'dialog-yes' })
+        ])
+      ])
+    ]);
+    document.body.appendChild(back);
+  }
+  const yes = document.getElementById('dialog-yes');
+  const no = document.getElementById('dialog-no');
+  document.getElementById('dialog-msg').textContent = msg;
+  yes.textContent = opts.yes || 'はい';
+  no.textContent = opts.no || 'いいえ';
+  yes.className = 'btn small ' + (opts.danger ? 'danger' : 'primary');
+  back.hidden = false;
+  const close = () => { back.hidden = true; yes.onclick = null; no.onclick = null; back.onclick = null; };
+  yes.onclick = () => { close(); if (onYes) onYes(); };
+  no.onclick = () => { close(); Sound.se('cancel'); };
+  back.onclick = (e) => { if (e.target === back) { close(); Sound.se('cancel'); } };
+  try { no.focus({ preventScroll: true }); } catch (e) {}
+}
+
+// ---- やくわり（さんかしゃ／かんじ）----------------------------------
+// せっていで「かんじ」を えらんだ スマホだけが たくぐみの まに 入れます。
+function isHost() { return Store.get('role', '') === 'host'; }
 
 // ---- 上の バー（♪・SE・よる）を つなぐ ---------------------------
 function bindTopbar(onBgmOn) {

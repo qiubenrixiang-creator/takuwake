@@ -56,25 +56,14 @@ function say(text) { if ($say) $say.textContent = text; }
 document.addEventListener('click', () => { Sound.unlock(); Sound.bgm('kumi'); }, { capture: true, once: true });
 
 // ---- 扉の 錠 ------------------------------------------------
-function isUnlocked() {
-  try { return sessionStorage.getItem('takuwake2.kumiPass') === '1'; } catch (e) { return false; }
-}
-
+// やかたの「せってい」で かんじを えらんだ スマホだけが 入れます。
 function lockScreen() {
-  const input = h('input', { type: 'password', placeholder: 'あいことば', autocomplete: 'off', enterkeyhint: 'done', 'aria-label': 'あいことば' });
-  const msg = h('div', { class: 'msg-text', text: 'この とびらには かぎが かかって おる。\nかんじの あいことばを つげるのじゃ。' });
-  const open = () => {
-    if (input.value.trim() !== ADMIN_WORDS.kumi) { Sound.se('cancel'); input.value = ''; msg.textContent = 'ちがう ようじゃ。'; return; }
-    try { sessionStorage.setItem('takuwake2.kumiPass', '1'); } catch (e) {}
-    Sound.se('decide');
-    mainScreen();
-  };
-  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); open(); } });
+  const msg = h('div', { class: 'msg-text', text: 'この とびらは かんじにしか ひらけぬ。\nやかたの「せってい」で、やくわりを「かんじ」に するのじゃ。' });
   show([
     h('h1', { class: 'lede', text: 'とざされた とびら' }),
     h('div', { class: 'stack' }, [
       nushi(msg, 'とびら', 'door'),
-      win('あいことば', [h('div', { class: 'field' }, [input, h('button', { class: 'btn primary', type: 'button', text: 'ひらく', onclick: open })])]),
+      h('div', { class: 'btn-col' }, [h('a', { class: 'btn primary', href: 'index.html#settings', text: 'せってい を ひらく' })]),
       h('div', { class: 'back-row' }, [h('a', { class: 'btn small', href: 'index.html', text: '◀ やかたへ もどる' })])
     ])
   ]);
@@ -144,12 +133,14 @@ function addPerson() {
 
 function removePerson(id) {
   const p = K.roster.find((x) => x.id === id);
-  if (!p || !confirm(p.name + ' を めいぼから はずしますか。')) return;
-  Sound.se('cancel');
-  K.roster = K.roster.filter((x) => x.id !== id);
-  if (K.groups) K.groups = K.groups.map((g) => g.filter((x) => x !== id));
-  save();
-  renderAll();
+  if (!p) return;
+  ask(p.name + ' を めいぼから はずしますか。', () => {
+    Sound.se('cancel');
+    K.roster = K.roster.filter((x) => x.id !== id);
+    if (K.groups) K.groups = K.groups.map((g) => g.filter((x) => x !== id));
+    save();
+    renderAll();
+  }, { yes: 'はずす', danger: true });
 }
 
 function toggleLock(id) {
@@ -327,12 +318,13 @@ function copyText() {
 }
 
 function clearAll() {
-  if (!confirm('めいぼと たくぐみを すべて けします。よろしいですか。')) return;
-  Sound.se('cancel');
-  K.roster = []; K.groups = null; K.names = null; K.selected = null;
-  save();
-  say('めいぼを しろしに もどしたぞい。');
-  renderAll();
+  ask('めいぼと たくぐみを すべて けします。よろしいですか。', () => {
+    Sound.se('cancel');
+    K.roster = []; K.groups = null; K.names = null; K.selected = null;
+    save();
+    say('めいぼを しろしに もどしたぞい。');
+    renderAll();
+  }, { yes: 'けす', danger: true });
 }
 
 // ---- はじまり ----------------------------------------------
@@ -340,4 +332,4 @@ paintIcons(document);
 bindTopbar(() => Sound.bgm('kumi'));
 const $library = document.getElementById('tab-library');
 if ($library && SITE.libraryUrl) $library.setAttribute('href', SITE.libraryUrl);
-if (isUnlocked()) mainScreen(); else lockScreen();
+if (isHost()) mainScreen(); else lockScreen();
