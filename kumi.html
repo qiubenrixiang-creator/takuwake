@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#000000">
+  <meta name="description" content="卓分けの館・幹事用の卓組み画面。参加者の合言葉を集めて、まとめて卓に割り当てます。">
+  <title>卓組みの間 | 卓分けの館</title>
+  <link href="https://fonts.googleapis.com/css2?family=DotGothic16&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="host-page">
+
+<!-- 幹事以外が迷い込んだときの扉 -->
+<div id="lock-screen" class="lock-screen">
+  <div class="game-container" style="max-width:420px; width:100%;">
+    <div class="character-box">
+      <div class="character-avatar">🚪</div>
+      <div>
+        <div class="character-name">閉ざされた扉</div>
+        <div style="font-size: 11px; color: #aaa;">幹事のみが通れる</div>
+      </div>
+    </div>
+    <div class="message-box" style="min-height:auto;">
+      この扉には錠がかかっておる。<br>幹事の合言葉を告げるのじゃ。
+    </div>
+    <input type="text" id="lock-word" class="name-input" placeholder="あいことば" autocomplete="off">
+    <button class="btn" onclick="tryUnlock()">▶ 扉を開ける</button>
+    <a class="btn btn-back" href="index.html" style="display:block; text-decoration:none; text-align:center;">▶ 館へ戻る</a>
+  </div>
+</div>
+
+<div class="host-wrapper">
+
+  <div class="game-container">
+    <div class="character-box">
+      <div class="character-avatar">🗝️</div>
+      <div>
+        <div class="character-name">卓組みの間</div>
+        <div style="font-size: 11px; color: #aaa;">幹事だけが入る部屋</div>
+      </div>
+    </div>
+
+    <div id="notice-bar" class="notice-bar"></div>
+
+    <div class="message-box" style="min-height: auto;">
+      <div id="host-message">
+        診断を終えた者は、画面に4文字の合言葉を持っておる。<br>
+        名前と一緒に打ち込むのじゃ。全員そろったら卓を組むぞい。
+      </div>
+    </div>
+  </div>
+
+  <div class="host-section no-print">
+    <div class="host-title">参加者を迎える</div>
+    <div class="host-field">
+      <input type="text" id="add-name" class="name-input" placeholder="名前" autocomplete="off" style="flex:2 1 140px; margin-bottom:0;">
+      <input type="text" id="add-code" class="name-input seat-code-input" placeholder="合言葉" autocomplete="off" maxlength="5" inputmode="latin" style="flex:1 1 100px; margin-bottom:0;">
+      <button class="btn" style="flex:0 0 auto; width:auto;" onclick="addByCode()">▶ 迎える</button>
+    </div>
+    <div id="add-msg" class="host-note"></div>
+  </div>
+
+  <div class="host-section no-print">
+    <div class="host-title">迎えた者 <span id="roster-count"></span></div>
+    <div id="roster-list" class="host-roster"></div>
+    <button class="btn btn-back" style="margin-top:10px;" onclick="clearRoster()">▶ 名簿を白紙に戻す</button>
+  </div>
+
+  <div class="host-section no-print">
+    <div class="host-title">卓の設定</div>
+    <div class="host-field">
+      <label for="pref-size">1卓あたりの人数のめやす</label>
+      <input type="number" id="pref-size" class="name-input" value="4" min="2" max="8" inputmode="numeric">
+      <button class="btn" onclick="recalcCapacities()">▶ 卓数を計算し直す</button>
+    </div>
+    <div id="cap-summary" class="host-note"></div>
+  </div>
+
+  <div class="host-section no-print">
+    <button class="btn btn-primary" onclick="runAssign()">▶ 卓を組む</button>
+    <div id="assign-msg" class="host-note"></div>
+  </div>
+
+  <div class="host-section">
+    <div class="host-title">卓の割り当て</div>
+    <div class="host-note no-print" id="swap-hint"></div>
+    <div id="tables" class="host-tables"></div>
+  </div>
+
+  <div class="host-section no-print">
+    <div class="host-title">発表する</div>
+    <button class="btn btn-primary" onclick="copyPublishUrl()">▶ 発表リンクを作る</button>
+    <div class="host-note">
+      LINEなどに貼って皆に渡すのじゃ。一度開けば各自の端末に残り、<br>
+      いつでも館の「📜 記録」から席の一覧が見られるようになる。
+    </div>
+    <button class="btn" style="margin-top:10px;" onclick="window.print()">▶ 卓に置く札を印刷する</button>
+    <button class="btn" style="margin-top:8px;" onclick="copyResult()">▶ 結果を文字でコピーする</button>
+    <a class="btn" href="index.html" style="margin-top:8px; display:block; text-decoration:none;">▶ 館へ戻る</a>
+  </div>
+
+</div>
+
+<script src="js/store.js"></script>
+<script src="js/data.js"></script>
+<script src="js/assign.js"></script>
+<script src="js/kumi.js"></script>
+</body>
+</html>
