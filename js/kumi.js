@@ -11,6 +11,93 @@
 const KUMI_PASSWORD = 'たくぐみ';          // 館の名前入力欄でも、この言葉で入れます
 const KUMI_STORE_KEY = 'takuwake_kumi_v1';
 
+// ---- 音 ------------------------------------------------------
+// 館と同じ作りです。play() は「鳴らす準備をせよ」という要求で、
+// 実際に音が出るまでに時間差があります。その間に pause() を呼んでも
+// 遅れて再生が始まってしまうため、札を付けて確実に止めます。
+const nativePlay = HTMLMediaElement.prototype.play;
+const nativePause = HTMLMediaElement.prototype.pause;
+
+function makeSafeAudio(audio, preloadMode) {
+  let token = 0;
+  audio.preload = preloadMode || 'auto';
+  audio.play = function () {
+    const mine = ++token;
+    let p;
+    try { p = nativePlay.call(audio); } catch (e) { return Promise.resolve(); }
+    if (!p || !p.then) return Promise.resolve();
+    return p.then(() => {
+      if (mine !== token) { nativePause.call(audio); audio.currentTime = 0; }
+    }).catch(() => {});
+  };
+  audio.pause = function () {
+    token++;
+    try { nativePause.call(audio); } catch (e) { /* 未読込なら何もしない */ }
+  };
+  return audio;
+}
+
+const kumiBGM     = makeSafeAudio(new Audio(AUDIO_FILES.bgmKumi), 'auto');
+kumiBGM.loop = true;
+kumiBGM.volume = 0.5;
+const seDecide    = makeSafeAudio(new Audio(AUDIO_FILES.seDecide), 'auto');
+const seCancel    = makeSafeAudio(new Audio(AUDIO_FILES.seCancel), 'auto');
+const seBack      = makeSafeAudio(new Audio(AUDIO_FILES.seBack), 'auto');
+const seFanfare   = makeSafeAudio(new Audio(AUDIO_FILES.seFanfare), 'auto');
+const seEyecatch  = makeSafeAudio(new Audio(AUDIO_FILES.seEyecatch), 'auto');
+
+let kumiSoundOn = true;
+try { kumiSoundOn = localStorage.getItem('takuwake_kumi_sound') !== 'off'; } catch (e) {}
+let kumiAudioReady = false;
+
+// iOSのSafariは「一度も再生したことのない音声」を後から鳴らそうとしても拒みます。
+// 画面を最初に触った瞬間に、無音の再生許可だけを取っておきます。
+function unlockAudio(audio) {
+  if (audio._unlocked) return Promise.resolve();
+  audio._unlocked = true;
+  return new Promise((done) => {
+    const settle = () => {
+      try { nativePause.call(audio); audio.currentTime = 0; } catch (e) {}
+      audio.muted = false;
+      done();
+    };
+    try {
+      audio.muted = true;
+      const p = nativePlay.call(audio);
+      if (p && p.then) p.then(settle).catch(settle);
+      else settle();
+    } catch (e) { audio.muted = false; done(); }
+  });
+}
+
+function startKumiAudio() {
+  if (kumiAudioReady) return;
+  kumiAudioReady = true;
+  const all = [seDecide, seCancel, seBack, seFanfare, seEyecatch, kumiBGM];
+  Promise.all(all.map(unlockAudio)).then(() => {
+    if (kumiSoundOn) { kumiBGM.currentTime = 0; kumiBGM.play().catch(() => {}); }
+  });
+}
+
+function se(audio) {
+  if (!kumiSoundOn || !kumiAudioReady) return;
+  audio.currentTime = 0;
+  audio.play().catch(() => {});
+}
+
+function toggleKumiSound() {
+  kumiSoundOn = !kumiSoundOn;
+  try { localStorage.setItem('takuwake_kumi_sound', kumiSoundOn ? 'on' : 'off'); } catch (e) {}
+  if (kumiSoundOn) { kumiBGM.play().catch(() => {}); se(seDecide); }
+  else { kumiBGM.pause(); }
+  renderSoundButton();
+}
+
+function renderSoundButton() {
+  const b = document.getElementById('btn-sound');
+  if (b) b.textContent = kumiSoundOn ? '🔊 音あり' : '🔇 音なし';
+}
+
 let roster = [];        // [{ id, name, tableKey, exp, leave, title, profile, lockedTable }]
 let capacities = [];
 let groups = null;      // [[id, ...], ...]
@@ -43,10 +130,12 @@ function isUnlocked() {
 function tryUnlock() {
   const el = document.getElementById('lock-word');
   if (el.value.trim() !== KUMI_PASSWORD) {
+    se(seCancel);
     el.value = '';
     el.placeholder = '違うようじゃ';
     return;
   }
+  se(seDecide);
   try { sessionStorage.setItem('takuwake_kumi_pass', '1'); } catch (e) { /* 一度きりの入室になる */ }
   document.getElementById('lock-screen').style.display = 'none';
 }
@@ -83,6 +172,7 @@ function addByCode() {
   const name = nameEl.value.trim();
 
   if (!name) {
+    se(seCancel);
     msg.className = 'host-note host-note-warn';
     msg.textContent = '名前を入れるのじゃ。';
     nameEl.focus();
@@ -91,6 +181,7 @@ function addByCode() {
 
   const seat = decodeSeatCode(codeEl.value);
   if (!seat) {
+    se(seCancel);
     msg.className = 'host-note host-note-warn';
     msg.textContent = '合言葉が読み取れぬ。4文字をもう一度確かめるのじゃ。';
     codeEl.focus();
@@ -120,6 +211,7 @@ function addByCode() {
   recalcCapacities(true);
   saveKumi();
   renderAll();
+  se(seDecide);
 
   msg.className = 'host-note';
   msg.textContent = finalName === name
@@ -134,6 +226,7 @@ function removeParticipant(id) {
   const p = roster.find((x) => x.id === id);
   if (!p) return;
   if (!confirm(`${p.name} を名簿から外しますか。`)) return;
+  se(seCancel);
   roster = roster.filter((x) => x.id !== id);
   if (groups) groups = groups.map((g) => g.filter((x) => x !== id));
   recalcCapacities(true);
@@ -143,6 +236,7 @@ function removeParticipant(id) {
 
 function clearRoster() {
   if (!confirm('名簿と卓組みをすべて消します。元に戻せません。よろしいですか。')) return;
+  se(seCancel);
   roster = []; groups = null; capacities = []; selectedId = null;
   saveKumi();
   renderAll();
@@ -154,7 +248,7 @@ function recalcCapacities(silent) {
   const size = parseInt(document.getElementById('pref-size').value) || 4;
   capacities = suggestCapacities(roster.length, size, ALL_TABLES.length);
   groups = null;
-  if (!silent) { saveKumi(); renderAll(); }
+  if (!silent) { se(seBack); saveKumi(); renderAll(); }
 }
 
 function renderCapSummary() {
@@ -171,6 +265,7 @@ function renderCapSummary() {
 function runAssign() {
   const msg = document.getElementById('assign-msg');
   if (roster.length < 2) {
+    se(seCancel);
     msg.className = 'host-note host-note-warn';
     msg.textContent = '参加者が2名以上おらぬと、卓は組めぬ。';
     return;
@@ -181,12 +276,14 @@ function runAssign() {
     const result = assignTables(roster, capacities);
     groups = result.map((g) => g.map((p) => p.id));
     selectedId = null;
+    se(seFanfare);
     msg.className = 'host-note';
     msg.textContent = '卓を組んだぞい。気に入らぬところは名前をたたいて入れ替えるのじゃ。';
     setMessage('割り当てができたぞい。<br>よければ「発表リンクを作る」を押すのじゃ。');
     saveKumi();
     renderAll();
   } catch (e) {
+    se(seCancel);
     msg.className = 'host-note host-note-warn';
     msg.textContent = e.message;
   }
@@ -198,6 +295,7 @@ function seatClick(tableIndex, id) {
 
   if (selectedId === null) {
     if (id === null) return;
+    se(seBack);
     selectedId = id;
     renderTables();
     return;
@@ -218,6 +316,7 @@ function seatClick(tableIndex, id) {
     groups[to] = groups[to].map((x) => (x === id ? selectedId : x));
   }
   selectedId = null;
+  se(seDecide);
   saveKumi();
   renderAll();
 }
@@ -225,6 +324,7 @@ function seatClick(tableIndex, id) {
 function toggleLock(id) {
   const p = roster.find((x) => x.id === id);
   if (!p) return;
+  se(seBack);
   if (Number.isInteger(p.lockedTable)) p.lockedTable = undefined;
   else {
     const t = groups ? groups.findIndex((g) => g.includes(id)) : -1;
@@ -256,13 +356,15 @@ function buildPublishUrl() {
 
 function copyPublishUrl() {
   const url = buildPublishUrl();
-  if (!url) { showNotice('先に「卓を組む」を押すのじゃ。'); return; }
+  if (!url) { se(seCancel); showNotice('先に「卓を組む」を押すのじゃ。'); return; }
+  se(seEyecatch);
   copyText(url, '発表リンクをコピーした。LINEなどに貼って皆に渡すのじゃ。');
 }
 
 function copyResult() {
   const text = buildResultText();
-  if (!text) { showNotice('先に「卓を組む」を押すのじゃ。'); return; }
+  if (!text) { se(seCancel); showNotice('先に「卓を組む」を押すのじゃ。'); return; }
+  se(seBack);
   copyText(text, '結果をコピーした。');
 }
 
@@ -428,5 +530,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (e.key === 'Enter') { e.preventDefault(); addByCode(); }
   });
   loadKumi();
+  renderSoundButton();
   renderAll();
+
+  // 最初に画面を触った瞬間だけが、iOSが再生を許す機会です
+  document.addEventListener('pointerdown', startKumiAudio, { once: true });
+  document.addEventListener('click', startKumiAudio, { once: true });
+  document.addEventListener('keydown', startKumiAudio, { once: true });
 });

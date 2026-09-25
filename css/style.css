@@ -273,3 +273,8 @@
     .cert-stats { font-size: 12px; color: #bba24a; line-height: 1.9; border-top: 1px dashed #5a4a12; padding-top: 10px; }
     .cert-date { font-size: 12px; color: #bba24a; margin-top: 12px; }
     .cert-code { font-size: 11px; color: #6f6134; letter-spacing: .1em; margin-top: 10px; }
+
+    /* --- 卓組みの間の音の切り替え --- */
+    .btn-sound { flex: none; font-size: 12px; padding: 6px 10px; border-color: #666; }
+    .btn-sound:hover { border-color: #fff; color: #fff; }
+    @media print { .btn-sound { display: none; } }

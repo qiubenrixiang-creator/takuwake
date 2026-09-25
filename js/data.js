@@ -107,6 +107,7 @@
     bgmSecret:    'assets/audio/bgm_secret.mp3',
     bgmSerious:   'assets/audio/bgm_serious.mp3',
     bgmStaffRoll: 'assets/audio/bgm_staffroll.mp3',
+    bgmKumi:      'assets/audio/bgm_kumi.mp3',
     seDecide:     'assets/audio/se_decide.mp3',
     seCancel:     'assets/audio/se_cancel.mp3',
     seBack:       'assets/audio/se_back.mp3',

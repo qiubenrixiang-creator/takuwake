@@ -24,6 +24,7 @@
     <div class="message-box" style="min-height:auto;">
       この扉には錠がかかっておる。<br>幹事の合言葉を告げるのじゃ。
     </div>
+    <div style="font-size:11px; color:#666; text-align:center; margin-bottom:8px;">※この部屋では音が鳴ります</div>
     <input type="text" id="lock-word" class="name-input" placeholder="あいことば" autocomplete="off">
     <button class="btn" onclick="tryUnlock()">▶ 扉を開ける</button>
     <a class="btn btn-back" href="index.html" style="display:block; text-decoration:none; text-align:center;">▶ 館へ戻る</a>
@@ -35,10 +36,11 @@
   <div class="game-container">
     <div class="character-box">
       <div class="character-avatar">🗝️</div>
-      <div>
+      <div style="flex:1;">
         <div class="character-name">卓組みの間</div>
         <div style="font-size: 11px; color: #aaa;">幹事だけが入る部屋</div>
       </div>
+      <button id="btn-sound" class="host-icon-btn btn-sound" onclick="toggleKumiSound()">🔊 音あり</button>
     </div>
 
     <div id="notice-bar" class="notice-bar"></div>
